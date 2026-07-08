@@ -10,7 +10,7 @@ Confirm the Galaxy's Edge BB-8 BLE protocol. No purchased hardware required.
 **Exit criterion:** documented, testable command set (roll, heading, head rotation, LED, sound trigger) with confirmed round-trip latency. — **Met:** all five command types confirmed on our unit; write-ACK round-trip latency measured and logged (~176–268 ms). Physical utterance→motion timing is intentionally deferred to Phase 1, where it is the exit criterion.
 
 ## Phase 1 — MVP Software Loop (phone-only)
-**Status:** 🔨 IN PROGRESS — started 2026-07-07
+**Status:** ✅ COMPLETE — closed 2026-07-08 (with caveat, see below)
 
 Pixel 10 Fold runs orchestration directly: mic capture → Gemini → response → BLE command to BB-8. Desktop is dev host only.
 
@@ -23,12 +23,24 @@ Pixel 10 Fold runs orchestration directly: mic capture → Gemini → response �
 
 **Exit criterion (amended 2026-07-07):** end-to-end demo works repeatably (spoken prompt → droid physical + audible reaction), with utterance→reaction latency logged on every run. No latency target gated; the log IS the Phase 2/3 baseline.
 
+**How it was met (2026-07-08):** 11 voice→reaction successes across two on-unit sessions (`droid_voice_log.csv`, `droid_voice_log_stale_build_session.csv`); utterance→reaction 2.3–3.9 s, Gemini dominates (~2.2–3.3 s), BLE negligible. All failures (5) were Gemini JSON parse errors — root-caused, fixed in v3 (robust extraction + retry), unit-tested against both observed failure modes. **Caveat:** v3 fix not yet validated on-unit (API quota hit); the first Phase 2 session doubles as that validation. If v3 fails on-unit, this phase reopens per the update rule.
+
 ## Phase 2 — Embodiment Hardening
-**Status:** not started — blocked on Phase 1
+**Status:** UNBLOCKED — ready to begin (Phase 1 closed 2026-07-08). First session must validate the v3 voice-loop fix on-unit before anything else.
 
 Formalize BLE control as a swappable interface (modularity requirement — body should be replaceable without touching orchestration code). State management: idle animations, mid-command interrupts, BLE reconnect/error handling.
 
-**Exit criterion:** droid survives a 30-minute unattended session without a hard crash or BLE desync.
+**Design principle (decided 2026-07-08):** use the cheapest system that produces the behavior. Reflexes (idle fidgets, timers, reconnect) = local algorithms, $0, no Gemini. Cognition (interpreting speech) = Gemini. Audio becomes an *interrupt* to an otherwise algorithmic idle loop.
+
+**Work items (in order):**
+1. Validate v3 voice loop on-unit — 10 paced trials (~10 s apart for API quota); the Phase 1 caveat. If it fails, Phase 1 reopens.
+2. Body driver seam — gather CMD/ACTIONS/connect/framing into one object (`body.connect()`, `body.do(action)`, `body.onDrop()`); command vocabulary is already complete, this is structure only. Phase 3 test: a new body = one new object, zero brain changes.
+3. Idle state machine — random fidgets on timers (head turns, blinks, occasional beep), pure algorithm, zero API calls.
+4. Reconnect/error handling — detect BLE drops, auto-reconnect + re-init, resume idle; voice interrupts yield mid-fidget.
+
+**Open sub-questions carried in:** head-LED flash anomaly (`...45 01` no reaction); flaky stop commands (Phase 0 log rows 13–14); undecoded notify payload `2F 32 81 45 4B 10 01 44 44 11 11 01 00 00 00 00` (apply framing rule in reverse); Web Speech STT mishearings (improvement, not a gate). For Phase 3: decide which side of the seam the microphone lives on.
+
+**Exit criterion:** droid survives a 30-minute unattended session without a hard crash or BLE desync — proven by the session CSV, not by feel.
 
 ## Phase 3 — Custom Embedded Body (first purchased hardware)
 **Status:** not started — blocked on Phase 2
