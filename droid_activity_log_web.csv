@@ -1,0 +1,13 @@
+timestamp,script,action,command_hex,ack_ms,reacted,notes
+2026-07-08T06:52:12,bb8_web_test,Notify,2F 32 81 45 4B 10 01 44 44 11 11 01 00 00 00 00,,,notification received
+2026-07-08T06:52:13,bb8_web_test,Notify,2F 32 81 45 4B 10 01 44 44 11 11 01 00 00 00 00,,,notification received
+2026-07-08T06:52:14,bb8_web_test,Notify,2F 32 81 45 4B 10 01 44 44 11 11 01 00 00 00 00,,,notification received
+2026-07-08T06:52:14,bb8_web_test,Init handshake,222001 / 27420f4444001f00 / 27420f4444001802,93.0,,"3-packet block x3, web port"
+2026-07-08T06:52:17,bb8_web_test,Set volume ~50,27 42 0F 44 44 00 0E 32,156.3,,no visible effect; web port
+2026-07-08T06:52:23,bb8_web_test,Head LED OFF,27 42 0F 44 44 00 49 01,120.1,,head light off; web port
+2026-07-08T06:52:25,bb8_web_test,Head LED ON,27 42 0F 44 44 00 48 01,124.3,,head light on; web port
+2026-07-08T06:52:26,bb8_web_test,Play sound,27 42 0F 44 44 00 18 00,98.2,,audible beep (LOUD - mind sleepers); web port
+2026-07-08T06:52:34,bb8_web_test,Drive straight (both motors),29 00 05 46 00 5A 01 2C 00 00,108.2,,motors 0+1 same direction; auto-stop 0.8s; web port
+2026-07-08T06:52:35,bb8_web_test,Drive fwd (motor 0),29 00 05 46 00 50 01 2C 00 00,164.6,,MOVEMENT - floor space; web port
+2026-07-08T06:52:39,bb8_web_test,Stop all motors,29 00 05 46 00 00 01 2C 00 00,100.2,,manual stop
+2026-07-08T06:52:46,bb8_web_test,Stop all motors,29 00 05 46 00 00 01 2C 00 00,149.6,,manual stop
