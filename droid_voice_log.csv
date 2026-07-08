@@ -1,0 +1,7 @@
+timestamp,script,action,command_hex,ack_ms,reacted,notes
+2026-07-08T07:04:03,bb8_voice,Voice error,,,n,"heard=""hey"" err=Expected ',' or '}' after property value in JSON at position 49 (line 1 column 50)"
+2026-07-08T07:04:08,bb8_voice,Voice reaction,beep+spin,3479.1,y,"heard=""speak"" mood=""sassy"" gemini=3334ms firstBLE=1201ms total=3479ms"
+2026-07-08T07:08:11,bb8_voice,Voice error,,,n,"heard=""what's up bb-8"" err=Unexpected non-whitespace character after JSON at position 68 (line 8 column 1)"
+2026-07-08T07:08:21,bb8_voice,Voice reaction,spin+led_on+beep,3689.8,y,"heard=""bb-8 speak"" mood=""sassy"" gemini=2816ms firstBLE=1545ms total=3690ms"
+2026-07-08T07:08:37,bb8_voice,Voice reaction,beep+drive,2329.9,y,"heard=""bb-8 move forward"" mood=""eager"" gemini=2176ms firstBLE=1578ms total=2330ms"
+2026-07-08T07:09:02,bb8_voice,Voice reaction,spin+beep,3190.2,y,"heard=""bb8 spin your head"" mood=""playful"" gemini=2290ms firstBLE=1196ms total=3190ms"

@@ -88,10 +88,12 @@ const INIT_SEQUENCE = ["222001", "27420f4444001f00", "27420f4444001802"];
 // ---- the droid's action vocabulary (only on-unit-confirmed commands) ----
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let writeChar = null;
+let firstAckAt = null;   // stamped at the FIRST write ACK of each voice run — the real "reaction" moment
 async function writeCmd(pkt) {
   const t0 = performance.now();
   if (writeChar.writeValueWithResponse) await writeChar.writeValueWithResponse(pkt);
   else await writeChar.writeValue(pkt);
+  if (firstAckAt === null) firstAckAt = performance.now();
   return performance.now() - t0;
 }
 const ACTIONS = {
@@ -109,24 +111,38 @@ const SYSTEM_PROMPT = `You are BB-8, a small droid: loyal, curious, expressive, 
 Available actions: beep, led_on, led_off, look_left, look_right, drive (roll forward briefly), spin (pivot in place).
 Respond with ONLY JSON: {"actions":["...","..."],"mood":"one short word"} — 1 to 3 actions, in the order to perform them. Match the emotional tone of what was said.`;
 
+function extractJson(text) {
+  try { return JSON.parse(text); } catch (e) {}
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  try { return JSON.parse(cleaned); } catch (e) {}
+  const m = cleaned.match(/\{[\s\S]*?\}/);          // first {...} block, ignore trailing junk
+  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }
+  return null;
+}
+
 async function askGemini(utterance) {
   const key = document.getElementById("apiKey").value.trim();
   const model = document.getElementById("model").value.trim();
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [{ parts: [{ text: utterance }] }],
-      generationConfig: { response_mime_type: "application/json", temperature: 1.0 },
-    }),
-  });
-  if (!res.ok) throw new Error("Gemini HTTP " + res.status + ": " + (await res.text()).slice(0, 200));
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-  const parsed = JSON.parse(text);
-  const actions = (parsed.actions || []).filter(a => a in ACTIONS).slice(0, 3);
-  return { actions, mood: parsed.mood || "" };
+  let lastErr = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {          // one retry on bad JSON
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{ parts: [{ text: utterance }] }],
+        generationConfig: { response_mime_type: "application/json", temperature: 1.0 },
+      }),
+    });
+    if (!res.ok) throw new Error("Gemini HTTP " + res.status + ": " + (await res.text()).slice(0, 200));
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const parsed = extractJson(text);
+    const actions = (parsed?.actions || []).filter(a => a in ACTIONS).slice(0, 3);
+    if (actions.length) return { actions, mood: parsed.mood || "", attempt };
+    lastErr = "unparseable/empty actions in: " + text.slice(0, 120);
+  }
+  throw new Error("Gemini JSON failed twice — " + lastErr);
 }
 
 // ---- logging (same schema as droid_activity_log.csv) ----
@@ -207,16 +223,16 @@ talkBtn.onclick = () => {
     setStatus("Thinking…");
     try {
       const tG0 = performance.now();
-      const { actions, mood } = await askGemini(heard);
+      const { actions, mood, attempt } = await askGemini(heard);
       const geminiMs = performance.now() - tG0;
-      if (!actions.length) { setStatus("Gemini returned no valid actions.", "err"); return; }
       setStatus("Reacting: " + actions.join(" → ") + (mood ? "  (" + mood + ")" : ""), "ok");
-      const tA0 = performance.now();
-      await ACTIONS[actions[0]]();                          // first physical reaction
-      const utterToReact = performance.now() - tUtter;      // THE Phase 1 number
+      firstAckAt = null;                                    // arm the first-ACK stamp
+      await ACTIONS[actions[0]]();
+      const utterToReact = (firstAckAt ?? performance.now()) - tUtter;  // THE Phase 1 number: utterance end -> first ACK
+      const bleMs = firstAckAt ? (firstAckAt - tG0 - geminiMs) : 0;
       for (const a of actions.slice(1)) { await ACTIONS[a](); await sleep(150); }
       logEvent("Voice reaction", actions.join("+"), utterToReact, "y",
-        `heard="${heard}" mood="${mood}" gemini=${geminiMs.toFixed(0)}ms firstBLE=${(performance.now()-tA0).toFixed(0)}ms total=${utterToReact.toFixed(0)}ms`);
+        `heard="${heard}" mood="${mood}" gemini=${geminiMs.toFixed(0)}ms ble=${bleMs.toFixed(0)}ms attempt=${attempt} total=${utterToReact.toFixed(0)}ms`);
     } catch (err) {
       setStatus("Error: " + err.message, "err");
       logEvent("Voice error", "", null, "n", `heard="${heard}" err=${err.message.slice(0,150)}`);
