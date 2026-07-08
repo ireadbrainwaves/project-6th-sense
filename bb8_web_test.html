@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6th Sense — BB-8 Web Bluetooth tester (Phase 1, milestone 1)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; max-width: 720px; margin-inline: auto; }
+  h1 { font-size: 1.15rem; margin: 4px 0 2px; }
+  .sub { color: gray; font-size: .85rem; margin-bottom: 10px; }
+  #status { padding: 10px 12px; border-radius: 8px; background: rgba(128,128,128,.15); font-size: .95rem; margin-bottom: 10px; min-height: 1.2em; }
+  #status.ok { background: rgba(30,160,90,.2); }
+  #status.err { background: rgba(220,60,60,.2); }
+  button { font-size: 1rem; padding: 14px 10px; border-radius: 10px; border: 1px solid rgba(128,128,128,.4); background: rgba(128,128,128,.1); cursor: pointer; }
+  button:disabled { opacity: .4; }
+  #connect { width: 100%; font-weight: 600; font-size: 1.1rem; margin-bottom: 10px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .wide { grid-column: 1 / -1; }
+  .danger { border-color: rgba(220,60,60,.6); }
+  table { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: 6px; }
+  th, td { border-bottom: 1px solid rgba(128,128,128,.3); padding: 4px 5px; text-align: left; }
+  td.reacted { cursor: pointer; font-weight: 600; text-align: center; min-width: 2em; }
+  .logbar { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  .logbar button { padding: 8px 12px; font-size: .9rem; }
+  .hint { color: gray; font-size: .78rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>6th Sense — BB-8 web tester</h1>
+<div class="sub">Phase 1, milestone 1: reproduce Phase 0 commands from the browser. Every send is auto-logged; export CSV matches <code>droid_activity_log.csv</code>.</div>
+
+<div id="status">Not connected. Droid remote OFF, Droid Depot app closed, then tap Connect right after powering the droid on.</div>
+<button id="connect">Connect to droid</button>
+
+<div class="grid" id="cmds">
+  <button data-cmd="ledOn">Head LED ON</button>
+  <button data-cmd="ledOff">Head LED OFF</button>
+  <button data-cmd="ledFlash">Head LED flash (anomaly)</button>
+  <button data-cmd="sound">Play sound (LOUD)</button>
+  <button data-cmd="volume">Set volume ~50</button>
+  <button data-cmd="rotL">Head rotate LEFT</button>
+  <button data-cmd="rotR">Head rotate RIGHT</button>
+  <button data-cmd="driveFwd">Drive fwd (motor 0)</button>
+  <button class="wide" data-cmd="driveStraight">Drive STRAIGHT (both motors, auto-stop 0.8s)</button>
+  <button class="wide danger" data-cmd="stopAll">STOP all motors</button>
+</div>
+
+<div class="logbar">
+  <b style="font-size:.9rem">Activity log</b>
+  <button id="export">Export CSV</button>
+  <button id="clear">Clear log</button>
+</div>
+<table>
+  <thead><tr><th>time</th><th>action</th><th>hex</th><th>ack ms</th><th>reacted</th></tr></thead>
+  <tbody id="logBody"></tbody>
+</table>
+<div class="hint">Tap the "reacted" cell to cycle y / n / blank. Rows persist in this browser (localStorage) until exported + cleared. CSV columns: timestamp, script, action, command_hex, ack_ms, reacted, notes.</div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------------------
+// THE FRAMING RULE — direct port of bb8_command_test.py (verified 2026-07-07).
+// One rule generates every command; nothing hardcoded.
+// ---------------------------------------------------------------------------
+const SERVICE_UUID = "09b600a0-3e42-41fc-b474-e9c0c8f0c801";
+const WRITE_UUID   = "09b600b1-3e42-41fc-b474-e9c0c8f0c801";
+const NOTIFY_UUID  = "09b600b0-3e42-41fc-b474-e9c0c8f0c801";
+const SCRIPT_NAME  = "bb8_web_test";
+
+const intToHex = n => { const h = n.toString(16); return h.length % 2 ? "0" + h : h; };
+const hexToBytes = hx => Uint8Array.from((hx.match(/../g) || []).map(b => parseInt(b, 16)));
+
+function buildCommand(commandId, data = "") {
+  // byte1=(len+3)|0x20, byte2=0x42 iff id 15, byte3=id, byte4=len+0x40
+  const dl = data.length / 2;
+  return Uint8Array.from([ (dl + 3) | 0x20, commandId === 15 ? 0x42 : 0x00, commandId, dl + 0x40, ...hexToBytes(data) ]);
+}
+const multi = (subId, data = "") => buildCommand(15, "44" + String(subId).padStart(2, "0") + data);
+const audio = (audioCmd, data = "00") => multi(0, intToHex(audioCmd) + data);
+
+// The command set (identical semantics to the Python tester)
+const BB_HEAD_LED = "01";
+const CMD = {
+  headLed:   on => audio(on ? 72 : 73, BB_HEAD_LED),         // SetLedOn/Off
+  ledFlash:  () => audio(69, BB_HEAD_LED),                    // FlashHeadLeds (open anomaly)
+  sound:     () => audio(24, "00"),                           // PlayAudioFromSelectedGroup
+  volume:    lvl => audio(14, intToHex(lvl)),                 // SetVolume (Austin-derived)
+  rotate:    back => multi(4, (back ? "ff" : "00") + intToHex(120) + intToHex(300) + "0000"),
+  drive:     (motor, speed) => buildCommand(5, "0" + motor + intToHex(speed) + intToHex(300) + "0000"),
+  stop:      motor => buildCommand(5, "0" + motor + "00" + intToHex(300) + "0000"),
+};
+const INIT_SEQUENCE = ["222001", "27420f4444001f00", "27420f4444001802"];
+
+// ---------------------------------------------------------------------------
+// Logging — same schema as droid_log.py, persisted to localStorage
+// ---------------------------------------------------------------------------
+const LS_KEY = "droid_activity_log_web";
+let rows = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+const save = () => localStorage.setItem(LS_KEY, JSON.stringify(rows));
+
+function logEvent(action, commandHex, ackMs, reacted = "", notes = "") {
+  rows.push({ timestamp: new Date().toISOString().slice(0, 19), script: SCRIPT_NAME,
+              action, command_hex: commandHex, ack_ms: ackMs != null ? ackMs.toFixed(1) : "",
+              reacted, notes });
+  save(); renderLog();
+}
+
+function renderLog() {
+  const tb = document.getElementById("logBody");
+  tb.innerHTML = "";
+  rows.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.timestamp.slice(11)}</td><td>${r.action}</td><td>${r.command_hex}</td><td>${r.ack_ms}</td>`;
+    const td = document.createElement("td");
+    td.className = "reacted"; td.textContent = r.reacted || "·";
+    td.onclick = () => { r.reacted = r.reacted === "y" ? "n" : r.reacted === "n" ? "" : "y"; save(); renderLog(); };
+    tr.appendChild(td); tb.appendChild(tr);
+  });
+}
+
+const csvEsc = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+document.getElementById("export").onclick = () => {
+  const fields = ["timestamp","script","action","command_hex","ack_ms","reacted","notes"];
+  const csv = fields.join(",") + "\n" + rows.map(r => fields.map(f => csvEsc(String(r[f] ?? ""))).join(",")).join("\n") + "\n";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "droid_activity_log_web.csv"; a.click(); URL.revokeObjectURL(a.href);
+};
+document.getElementById("clear").onclick = () => { if (confirm("Clear the local log? Export first!")) { rows = []; save(); renderLog(); } };
+
+// ---------------------------------------------------------------------------
+// Web Bluetooth
+// ---------------------------------------------------------------------------
+let writeChar = null;
+const statusEl = document.getElementById("status");
+const setStatus = (msg, cls = "") => { statusEl.textContent = msg; statusEl.className = cls; };
+const setButtons = en => document.querySelectorAll("#cmds button").forEach(b => b.disabled = !en);
+setButtons(false);
+
+async function writeCmd(pkt) {
+  const t0 = performance.now();
+  if (writeChar.writeValueWithResponse) await writeChar.writeValueWithResponse(pkt);
+  else await writeChar.writeValue(pkt);
+  return performance.now() - t0;
+}
+const hexStr = pkt => [...pkt].map(b => b.toString(16).padStart(2, "0")).join(" ").toUpperCase();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+document.getElementById("connect").onclick = async () => {
+  try {
+    if (!navigator.bluetooth) { setStatus("Web Bluetooth not available in this browser/context. Use Chrome over HTTPS or localhost.", "err"); return; }
+    setStatus("Requesting device… pick DROID in the chooser.");
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "DROID" }, { services: [SERVICE_UUID] }],
+      optionalServices: [SERVICE_UUID],
+    });
+    setStatus("Connecting to " + (device.name || "droid") + "…");
+    device.addEventListener("gattserverdisconnected", () => { writeChar = null; setButtons(false); setStatus("Disconnected.", "err"); logEvent("Disconnected", "", null, "", "gattserverdisconnected"); });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    writeChar = await service.getCharacteristic(WRITE_UUID);
+    try {
+      const notifyChar = await service.getCharacteristic(NOTIFY_UUID);
+      await notifyChar.startNotifications();
+      notifyChar.addEventListener("characteristicvaluechanged", e => {
+        const d = new Uint8Array(e.target.value.buffer);
+        logEvent("Notify", hexStr(d), null, "", "notification received");
+      });
+    } catch (e) { /* notify optional */ }
+
+    setStatus("Connected. Sending init handshake (droid should beep)…", "ok");
+    let ack = 0;
+    for (let i = 0; i < 3; i++) for (const p of INIT_SEQUENCE) { ack = await writeCmd(hexToBytes(p)); await sleep(100); }
+    logEvent("Init handshake", INIT_SEQUENCE.join(" / "), ack, "", "3-packet block x3, web port");
+    setButtons(true);
+    setStatus("Connected + init sent. Fire commands and mark reactions.", "ok");
+  } catch (err) {
+    setStatus("Error: " + err.message, "err");
+    logEvent("Connect error", "", null, "n", err.message);
+  }
+};
+
+const actions = {
+  ledOn:    async () => ["Head LED ON",  CMD.headLed(true),  "head light on"],
+  ledOff:   async () => ["Head LED OFF", CMD.headLed(false), "head light off"],
+  ledFlash: async () => ["Head LED flash", CMD.ledFlash(), "open anomaly — watch closely"],
+  sound:    async () => ["Play sound", CMD.sound(), "audible beep (LOUD - mind sleepers)"],
+  volume:   async () => ["Set volume ~50", CMD.volume(50), "no visible effect"],
+  rotL:     async () => ["Head rotate LEFT",  CMD.rotate(false), "dome turns one way"],
+  rotR:     async () => ["Head rotate RIGHT", CMD.rotate(true),  "dome turns the other way"],
+  driveFwd: async () => ["Drive fwd (motor 0)", CMD.drive(0, 80), "MOVEMENT - floor space"],
+};
+
+document.getElementById("cmds").addEventListener("click", async e => {
+  const cmd = e.target.dataset?.cmd;
+  if (!cmd || !writeChar) return;
+  try {
+    if (cmd === "driveStraight") {
+      const pkt = CMD.drive(0, 90);
+      const ack = await writeCmd(pkt);
+      await writeCmd(CMD.drive(1, 90));
+      await sleep(800);
+      await writeCmd(CMD.stop(0)); await writeCmd(CMD.stop(1));
+      logEvent("Drive straight (both motors)", hexStr(pkt), ack, "", "motors 0+1 same direction; auto-stop 0.8s; web port");
+      return;
+    }
+    if (cmd === "stopAll") {
+      const ack = await writeCmd(CMD.stop(0)); await writeCmd(CMD.stop(1));
+      logEvent("Stop all motors", hexStr(CMD.stop(0)), ack, "", "manual stop");
+      return;
+    }
+    const [label, pkt, notes] = await actions[cmd]();
+    const ack = await writeCmd(pkt);
+    logEvent(label, hexStr(pkt), ack, "", notes + "; web port");
+  } catch (err) {
+    setStatus("Send failed: " + err.message, "err");
+    logEvent("Send error (" + cmd + ")", "", null, "n", err.message);
+  }
+});
+
+renderLog();
+</script>
+</body>
+</html>

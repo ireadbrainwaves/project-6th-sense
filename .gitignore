@@ -1,0 +1,8 @@
+# Python bytecode — regenerated automatically, never belongs in history
+__pycache__/
+*.pyc
+
+# Secrets — API keys must NEVER be committed (Phase 1 will use a Gemini key)
+*.key
+.env
+secrets*

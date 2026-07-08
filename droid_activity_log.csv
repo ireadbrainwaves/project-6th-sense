@@ -1,0 +1,19 @@
+timestamp,script,action,command_hex,ack_ms,reacted,notes
+2026-07-07T22:38:06,bb8_command_test,Head LED ON,27 42 0F 44 44 00 48 01,112.1,y,head light on
+2026-07-07T22:38:06,bb8_command_test,Head LED OFF,27 42 0F 44 44 00 49 01,195.5,y,head light off
+2026-07-07T22:38:06,bb8_command_test,Head LED flash,27 42 0F 44 44 00 45 01,125.5,n,no reaction (tried x3)
+2026-07-07T22:38:06,bb8_command_test,Play sound,27 42 0F 44 44 00 18 00,184.4,y,audible beep
+2026-07-07T22:38:06,bb8_command_test,Set volume ~50,27 42 0F 44 44 00 0E 32,85.5,y,derived by Austin
+2026-07-07T22:38:06,bb8_command_test,Head rotate LEFT,2B 42 0F 48 44 04 00 78 01 2C 00 00,83.2,y,head/dome turned
+2026-07-07T22:38:06,bb8_command_test,Stop drive motor 0,29 00 05 46 00 00 01 2C 00 00,92.3,n,no visible effect (wasn't moving)
+2026-07-07T22:42:56,bb8_command_test,Play sound,27 42 0F 44 44 00 18 00,219.7,y,audible beep (LOUD - mind sleepers)
+2026-07-07T22:43:26,bb8_command_test,Drive fwd (low),29 00 05 46 00 50 01 2C 00 00,176.6,y,MOVEMENT - give it floor space
+2026-07-07T22:43:37,bb8_command_test,Stop drive motor 0,29 00 05 46 00 00 01 2C 00 00,183.7,y,movement should stop
+2026-07-07T22:43:52,bb8_command_test,Head rotate RIGHT,2B 42 0F 48 44 04 FF 78 01 2C 00 00,263.8,y,head/dome should turn the other way
+2026-07-07T22:44:01,bb8_command_test,Stop drive motor 0,29 00 05 46 00 00 01 2C 00 00,268.9,n,movement should stop
+2026-07-07T22:44:04,bb8_command_test,Stop drive motor 0,29 00 05 46 00 00 01 2C 00 00,487.8,n,movement should stop
+2026-07-07T22:44:09,bb8_command_test,Stop motors (quit),29 00 05 46 00 00 01 2C 00 00,236.1,,session end
+2026-07-07T22:49:24,bb8_command_test,Drive straight (both motors),29 00 05 46 00 5A 01 2C 00 00,221.0,n,motors 0+1 same direction
+2026-07-07T22:49:35,bb8_command_test,Drive straight (both motors),29 00 05 46 00 5A 01 2C 00 00,156.1,y,motors 0+1 same direction
+2026-07-07T22:50:31,bb8_command_test,Drive latency (video),29 00 05 46 00 5A 01 2C 00 00,171.3,y,press->move ~nms (slow-mo); both motors
+2026-07-07T22:50:37,bb8_command_test,Stop motors (quit),29 00 05 46 00 00 01 2C 00 00,239.8,,session end
