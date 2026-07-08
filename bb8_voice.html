@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6th Sense — voice loop (Phase 1 MVP)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; max-width: 720px; margin-inline: auto; }
+  h1 { font-size: 1.15rem; margin: 4px 0 2px; }
+  .sub { color: gray; font-size: .85rem; margin-bottom: 10px; }
+  #status { padding: 10px 12px; border-radius: 8px; background: rgba(128,128,128,.15); font-size: .95rem; margin-bottom: 10px; min-height: 1.2em; }
+  #status.ok { background: rgba(30,160,90,.2); }
+  #status.err { background: rgba(220,60,60,.2); }
+  button { font-size: 1rem; padding: 14px 10px; border-radius: 10px; border: 1px solid rgba(128,128,128,.4); background: rgba(128,128,128,.1); cursor: pointer; }
+  button:disabled { opacity: .4; }
+  input { font-size: .95rem; padding: 10px; border-radius: 8px; border: 1px solid rgba(128,128,128,.4); width: 100%; box-sizing: border-box; background: transparent; color: inherit; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .row > * { flex: 1; }
+  #connect { width: 100%; font-weight: 600; margin-bottom: 8px; }
+  #talk { width: 100%; font-weight: 700; font-size: 1.3rem; padding: 26px 10px; margin: 8px 0; border: 2px solid rgba(30,160,90,.6); }
+  #talk.listening { background: rgba(220,60,60,.25); border-color: rgba(220,60,60,.8); }
+  #stopAll { width: 100%; border-color: rgba(220,60,60,.6); margin-bottom: 8px; }
+  #transcript { font-size: 1.05rem; min-height: 1.4em; margin: 6px 0; font-style: italic; }
+  table { width: 100%; border-collapse: collapse; font-size: .75rem; margin-top: 6px; }
+  th, td { border-bottom: 1px solid rgba(128,128,128,.3); padding: 4px 5px; text-align: left; }
+  .logbar { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  .logbar button { padding: 8px 12px; font-size: .9rem; }
+  details { margin-bottom: 8px; }
+  summary { cursor: pointer; font-size: .9rem; color: gray; }
+  .hint { color: gray; font-size: .78rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>6th Sense — voice loop</h1>
+<div class="sub">Phase 1 MVP: speak → Gemini decides → BB-8 reacts. Utterance→reaction latency auto-logged.</div>
+
+<details>
+  <summary>Setup: Gemini API key + model (stored only in this browser)</summary>
+  <div class="row" style="margin-top:8px"><input id="apiKey" type="password" placeholder="Gemini API key (from aistudio.google.com)"></div>
+  <div class="row"><input id="model" value="gemini-3.5-flash" placeholder="model name"></div>
+</details>
+
+<div id="status">1) Enter API key. 2) Connect droid. 3) Hold nothing — just tap Talk and speak.</div>
+<button id="connect">Connect to droid</button>
+<button id="talk" disabled>🎤 Talk to BB-8</button>
+<button id="stopAll">STOP all motors</button>
+<div id="transcript"></div>
+
+<div class="logbar">
+  <b style="font-size:.9rem">Interaction log</b>
+  <button id="export">Export CSV</button>
+  <button id="clear">Clear</button>
+</div>
+<table>
+  <thead><tr><th>time</th><th>heard</th><th>actions</th><th>utter→react ms</th></tr></thead>
+  <tbody id="logBody"></tbody>
+</table>
+<div class="hint">CSV columns match droid_activity_log.csv. ack_ms = utterance-end → first BLE ACK (the Phase 1 exit-criterion number). Breakdown in notes.</div>
+
+<script>
+"use strict";
+// ---- framing rule (byte-identical to bb8_command_test.py, verified) ----
+const SERVICE_UUID = "09b600a0-3e42-41fc-b474-e9c0c8f0c801";
+const WRITE_UUID   = "09b600b1-3e42-41fc-b474-e9c0c8f0c801";
+const NOTIFY_UUID  = "09b600b0-3e42-41fc-b474-e9c0c8f0c801";
+const SCRIPT_NAME  = "bb8_voice";
+
+const intToHex = n => { const h = n.toString(16); return h.length % 2 ? "0" + h : h; };
+const hexToBytes = hx => Uint8Array.from((hx.match(/../g) || []).map(b => parseInt(b, 16)));
+function buildCommand(id, data = "") {
+  const dl = data.length / 2;
+  return Uint8Array.from([ (dl + 3) | 0x20, id === 15 ? 0x42 : 0x00, id, dl + 0x40, ...hexToBytes(data) ]);
+}
+const multi = (s, d = "") => buildCommand(15, "44" + String(s).padStart(2, "0") + d);
+const audio = (c, d = "00") => multi(0, intToHex(c) + d);
+const CMD = {
+  ledOn:   () => audio(72, "01"),
+  ledOff:  () => audio(73, "01"),
+  sound:   () => audio(24, "00"),
+  volume:  l => audio(14, intToHex(l)),
+  rotate:  back => multi(4, (back ? "ff" : "00") + intToHex(120) + intToHex(300) + "0000"),
+  drive:   (m, spd) => buildCommand(5, "0" + m + intToHex(spd) + intToHex(300) + "0000"),
+  stop:    m => buildCommand(5, "0" + m + "00" + intToHex(300) + "0000"),
+};
+const INIT_SEQUENCE = ["222001", "27420f4444001f00", "27420f4444001802"];
+
+// ---- the droid's action vocabulary (only on-unit-confirmed commands) ----
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let writeChar = null;
+async function writeCmd(pkt) {
+  const t0 = performance.now();
+  if (writeChar.writeValueWithResponse) await writeChar.writeValueWithResponse(pkt);
+  else await writeChar.writeValue(pkt);
+  return performance.now() - t0;
+}
+const ACTIONS = {
+  beep:        async () => writeCmd(CMD.sound()),
+  led_on:      async () => writeCmd(CMD.ledOn()),
+  led_off:     async () => writeCmd(CMD.ledOff()),
+  look_left:   async () => writeCmd(CMD.rotate(false)),
+  look_right:  async () => writeCmd(CMD.rotate(true)),
+  drive:       async () => { const a = await writeCmd(CMD.drive(0, 80)); await writeCmd(CMD.drive(1, 80)); await sleep(700); await writeCmd(CMD.stop(0)); await writeCmd(CMD.stop(1)); return a; },
+  spin:        async () => { const a = await writeCmd(CMD.drive(0, 80)); await sleep(600); await writeCmd(CMD.stop(0)); return a; },
+};
+
+// ---- Gemini (request-response) ----
+const SYSTEM_PROMPT = `You are BB-8, a small droid: loyal, curious, expressive, a bit sassy. A human just spoke to you. React with your body — you cannot speak words, only act.
+Available actions: beep, led_on, led_off, look_left, look_right, drive (roll forward briefly), spin (pivot in place).
+Respond with ONLY JSON: {"actions":["...","..."],"mood":"one short word"} — 1 to 3 actions, in the order to perform them. Match the emotional tone of what was said.`;
+
+async function askGemini(utterance) {
+  const key = document.getElementById("apiKey").value.trim();
+  const model = document.getElementById("model").value.trim();
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ parts: [{ text: utterance }] }],
+      generationConfig: { response_mime_type: "application/json", temperature: 1.0 },
+    }),
+  });
+  if (!res.ok) throw new Error("Gemini HTTP " + res.status + ": " + (await res.text()).slice(0, 200));
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+  const parsed = JSON.parse(text);
+  const actions = (parsed.actions || []).filter(a => a in ACTIONS).slice(0, 3);
+  return { actions, mood: parsed.mood || "" };
+}
+
+// ---- logging (same schema as droid_activity_log.csv) ----
+const LS_KEY = "droid_voice_log";
+let rows = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+const save = () => localStorage.setItem(LS_KEY, JSON.stringify(rows));
+function logEvent(action, commandHex, ackMs, reacted, notes) {
+  rows.push({ timestamp: new Date().toISOString().slice(0, 19), script: SCRIPT_NAME, action,
+              command_hex: commandHex, ack_ms: ackMs != null ? ackMs.toFixed(1) : "", reacted, notes });
+  save(); renderLog();
+}
+function renderLog() {
+  const tb = document.getElementById("logBody"); tb.innerHTML = "";
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    const heard = (r.notes.match(/heard="([^"]*)"/) || [,""])[1];
+    tr.innerHTML = `<td>${r.timestamp.slice(11)}</td><td>${heard || r.action}</td><td>${r.command_hex}</td><td>${r.ack_ms}</td>`;
+    tb.appendChild(tr);
+  });
+}
+const csvEsc = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+document.getElementById("export").onclick = () => {
+  const fields = ["timestamp","script","action","command_hex","ack_ms","reacted","notes"];
+  const csv = fields.join(",") + "\n" + rows.map(r => fields.map(f => csvEsc(String(r[f] ?? ""))).join(",")).join("\n") + "\n";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "droid_voice_log.csv"; a.click(); URL.revokeObjectURL(a.href);
+};
+document.getElementById("clear").onclick = () => { if (confirm("Clear the local log? Export first!")) { rows = []; save(); renderLog(); } };
+
+// ---- persistence for key/model ----
+const keyEl = document.getElementById("apiKey"), modelEl = document.getElementById("model");
+keyEl.value = localStorage.getItem("gemini_key") || "";
+modelEl.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+keyEl.onchange = () => localStorage.setItem("gemini_key", keyEl.value.trim());
+modelEl.onchange = () => localStorage.setItem("gemini_model", modelEl.value.trim());
+
+// ---- BLE connect ----
+const statusEl = document.getElementById("status");
+const setStatus = (m, c = "") => { statusEl.textContent = m; statusEl.className = c; };
+document.getElementById("connect").onclick = async () => {
+  try {
+    if (!navigator.bluetooth) { setStatus("Web Bluetooth unavailable — use Chrome over HTTPS.", "err"); return; }
+    setStatus("Pick DROID in the chooser…");
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "DROID" }, { services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID],
+    });
+    device.addEventListener("gattserverdisconnected", () => { writeChar = null; document.getElementById("talk").disabled = true; setStatus("Disconnected.", "err"); });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    writeChar = await service.getCharacteristic(WRITE_UUID);
+    setStatus("Connected. Sending init…", "ok");
+    for (let i = 0; i < 3; i++) for (const p of INIT_SEQUENCE) { await writeCmd(hexToBytes(p)); await sleep(100); }
+    document.getElementById("talk").disabled = false;
+    setStatus("Ready. Tap Talk and speak to your droid.", "ok");
+  } catch (e) { setStatus("Error: " + e.message, "err"); }
+};
+document.getElementById("stopAll").onclick = async () => { if (writeChar) { await writeCmd(CMD.stop(0)); await writeCmd(CMD.stop(1)); } };
+
+// ---- push-to-talk: Web Speech API ----
+const talkBtn = document.getElementById("talk");
+const trEl = document.getElementById("transcript");
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+talkBtn.onclick = () => {
+  if (!SR) { setStatus("Speech recognition unavailable in this browser.", "err"); return; }
+  const rec = new SR();
+  rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+  talkBtn.classList.add("listening"); talkBtn.textContent = "🔴 Listening…";
+  trEl.textContent = "";
+  const reset = () => { talkBtn.classList.remove("listening"); talkBtn.textContent = "🎤 Talk to BB-8"; };
+  rec.onerror = e => { reset(); setStatus("Mic error: " + e.error, "err"); };
+  rec.onresult = async e => {
+    reset();
+    const tUtter = performance.now();                       // utterance end ≈ result arrival
+    const heard = e.results[0][0].transcript;
+    trEl.textContent = "“" + heard + "”";
+    setStatus("Thinking…");
+    try {
+      const tG0 = performance.now();
+      const { actions, mood } = await askGemini(heard);
+      const geminiMs = performance.now() - tG0;
+      if (!actions.length) { setStatus("Gemini returned no valid actions.", "err"); return; }
+      setStatus("Reacting: " + actions.join(" → ") + (mood ? "  (" + mood + ")" : ""), "ok");
+      const tA0 = performance.now();
+      await ACTIONS[actions[0]]();                          // first physical reaction
+      const utterToReact = performance.now() - tUtter;      // THE Phase 1 number
+      for (const a of actions.slice(1)) { await ACTIONS[a](); await sleep(150); }
+      logEvent("Voice reaction", actions.join("+"), utterToReact, "y",
+        `heard="${heard}" mood="${mood}" gemini=${geminiMs.toFixed(0)}ms firstBLE=${(performance.now()-tA0).toFixed(0)}ms total=${utterToReact.toFixed(0)}ms`);
+    } catch (err) {
+      setStatus("Error: " + err.message, "err");
+      logEvent("Voice error", "", null, "n", `heard="${heard}" err=${err.message.slice(0,150)}`);
+    }
+  };
+  rec.onend = reset;
+  rec.start();
+};
+renderLog();
+</script>
+</body>
+</html>
