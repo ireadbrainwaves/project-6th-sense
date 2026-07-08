@@ -1,0 +1,11 @@
+timestamp,script,action,command_hex,ack_ms,reacted,notes
+2026-07-08T07:20:22,bb8_voice,Voice reaction,beep+spin,2715.5,y,"heard=""hey bb8"" mood=""cheerful"" gemini=2585ms firstBLE=1179ms total=2716ms"
+2026-07-08T07:20:33,bb8_voice,Voice error,,,n,"heard=""bb-8 tell my girlfriend to be quiet"" err=Expected ',' or '}' after property value in JSON at position 79 (line 7 column 18)"
+2026-07-08T07:20:40,bb8_voice,Voice reaction,beep+spin+beep,2738.3,y,"heard=""bb8 speak"" mood=""sassy"" gemini=2596ms firstBLE=1493ms total=2738ms"
+2026-07-08T07:20:50,bb8_voice,Voice reaction,beep+drive,2327.4,y,"heard=""bb-8 roll Ford"" mood=""eager"" gemini=2212ms firstBLE=1547ms total=2327ms"
+2026-07-08T07:21:02,bb8_voice,Voice reaction,beep+drive+drive,2415.2,y,"heard=""bb8 roll forward a lot"" mood=""excited"" gemini=2307ms firstBLE=2958ms total=2415ms"
+2026-07-08T07:21:13,bb8_voice,Voice reaction,drive+drive+drive,3850.6,y,"heard=""baby roll forward three times"" mood=""excited"" gemini=2611ms firstBLE=4088ms total=3851ms"
+2026-07-08T07:21:43,bb8_voice,Voice error,,,n,"heard=""bb-8 roll Ford 19 times"" err=Unexpected non-whitespace character after JSON at position 78 (line 9 column 1)"
+2026-07-08T07:21:50,bb8_voice,Voice reaction,look_left+look_right+beep,2857.5,y,"heard=""deviate rule Ford five times"" mood=""confused"" gemini=2706ms firstBLE=748ms total=2858ms"
+2026-07-08T07:22:10,bb8_voice,Voice error,,,n,"heard=""bb-8 stop"" err=Expected ',' or '}' after property value in JSON at position 70 (line 6 column 21)"
+2026-07-08T07:22:21,bb8_voice,Voice reaction,beep+spin+look_right,2646.9,y,"heard=""bb-8 turnaround"" mood=""spunky"" gemini=2464ms firstBLE=1533ms total=2647ms"

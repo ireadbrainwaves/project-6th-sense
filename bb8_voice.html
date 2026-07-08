@@ -32,7 +32,7 @@
 </style>
 </head>
 <body>
-<h1>6th Sense — voice loop</h1>
+<h1>6th Sense — voice loop <span id="ver"></span></h1>
 <div class="sub">Phase 1 MVP: speak → Gemini decides → BB-8 reacts. Utterance→reaction latency auto-logged.</div>
 
 <details>
@@ -64,7 +64,9 @@
 const SERVICE_UUID = "09b600a0-3e42-41fc-b474-e9c0c8f0c801";
 const WRITE_UUID   = "09b600b1-3e42-41fc-b474-e9c0c8f0c801";
 const NOTIFY_UUID  = "09b600b0-3e42-41fc-b474-e9c0c8f0c801";
-const SCRIPT_NAME  = "bb8_voice";
+const VERSION = "v3";   // bump on EVERY change — shows in header + every log row, so the CSV proves which build ran
+const SCRIPT_NAME  = "bb8_voice_" + VERSION;
+document.getElementById("ver").textContent = VERSION;
 
 const intToHex = n => { const h = n.toString(16); return h.length % 2 ? "0" + h : h; };
 const hexToBytes = hx => Uint8Array.from((hx.match(/../g) || []).map(b => parseInt(b, 16)));
