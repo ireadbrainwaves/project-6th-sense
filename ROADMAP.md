@@ -38,6 +38,10 @@ Formalize BLE control as a swappable interface (modularity requirement — body 
 3. Idle state machine — random fidgets on timers (head turns, blinks, occasional beep), pure algorithm, zero API calls.
 4. Reconnect/error handling — detect BLE drops, auto-reconnect + re-init, resume idle; voice interrupts yield mid-fidget.
 
+**TODO (field feedback 2026-07-09, v7):**
+- **Replace joystick with 4-way D-pad** like the Droid Depot app (▲ forward, ◀ ▶ pivot, ▼ reverse). Forward/pivots work with confirmed bytes; ▼ is blocked on decoding the reverse drive byte (likely a direction bit in `<dir><motor>` — one on-unit test). Austin's call: D-pad feel > joystick feel.
+- **STOP "didn't really work" (v7 field report)** — matches the flaky-stop sub-question carried since Phase 0 (log rows 13–14). Gather data: WHICH stop (pad release, STOP button, auto-stop?) and what the droid did. Candidate fix: redundant stop writes (send stop 2–3× spaced ~50 ms). Fold into work item 4 error handling.
+
 **Open sub-questions carried in:** head-LED flash anomaly (`...45 01` no reaction); flaky stop commands (Phase 0 log rows 13–14); undecoded notify payload `2F 32 81 45 4B 10 01 44 44 11 11 01 00 00 00 00` (apply framing rule in reverse); Web Speech STT mishearings (improvement, not a gate). For Phase 3: decide which side of the seam the microphone lives on.
 
 **Exit criterion:** droid survives a 30-minute unattended session without a hard crash or BLE desync — proven by the session CSV, not by feel.
