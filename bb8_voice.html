@@ -21,6 +21,8 @@
   #talk { width: 100%; font-weight: 700; font-size: 1.3rem; padding: 26px 10px; margin: 8px 0; border: 2px solid rgba(30,160,90,.6); }
   #talk.listening { background: rgba(220,60,60,.25); border-color: rgba(220,60,60,.8); }
   #stopAll { width: 100%; border-color: rgba(220,60,60,.6); margin-bottom: 8px; }
+  #idleBtn { width: 100%; margin-bottom: 8px; }
+  #idleBtn.on { background: rgba(30,160,90,.25); border-color: rgba(30,160,90,.8); font-weight: 600; }
   #transcript { font-size: 1.05rem; min-height: 1.4em; margin: 6px 0; font-style: italic; }
   table { width: 100%; border-collapse: collapse; font-size: .75rem; margin-top: 6px; }
   th, td { border-bottom: 1px solid rgba(128,128,128,.3); padding: 4px 5px; text-align: left; }
@@ -45,6 +47,7 @@
 <button id="connect">Connect to droid</button>
 <button id="talk" disabled>🎤 Talk to BB-8</button>
 <button id="stopAll">STOP all motors</button>
+<button id="idleBtn" disabled>😴 Idle mode: OFF</button>
 <div id="transcript"></div>
 
 <div class="logbar">
@@ -60,7 +63,7 @@
 
 <script>
 "use strict";
-const VERSION = "v4";   // v4: BODY DRIVER SEAM (Phase 2 item 2) + model string logged in every row. Bump on EVERY change.
+const VERSION = "v5";   // v5: IDLE STATE MACHINE (Phase 2 item 3) — calm-pet fidgets, zero API calls, toggle button. Bump on EVERY change.
 const SCRIPT_NAME = "bb8_voice_" + VERSION;
 document.getElementById("ver").textContent = VERSION;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -243,18 +246,78 @@ modelEl.value = localStorage.getItem("gemini_model") || "gemini-3.1-flash-lite";
 keyEl.onchange = () => localStorage.setItem("gemini_key", keyEl.value.trim());
 modelEl.onchange = () => localStorage.setItem("gemini_model", modelEl.value.trim());
 
+/* ---- IDLE STATE MACHINE (Phase 2 item 3) ----
+   A reflex, not cognition: pure local algorithm, zero API calls.
+   Lives on the BRAIN side of the seam (it sequences BETWEEN actions),
+   and speaks to the body only via body.do(). Calm-pet profile:
+   head turns + blinks every 15–45 s (random gap), rare quiet beep,
+   NEVER drives on its own. Yields to voice via the voiceBusy flag.
+   Known race (accepted for now, proper interrupts = work item 4):
+   a fidget already in flight when a voice reaction starts can overlap it. */
+let voiceBusy = false;
+const idle = (() => {
+  const MIN_GAP = 15000, MAX_GAP = 45000;
+  const FIDGETS = [   // [weight, name, perform]
+    [4, "look_left",  () => body.do("look_left")],
+    [4, "look_right", () => body.do("look_right")],
+    [3, "blink",      async () => { await body.do("led_on"); await sleep(400); await body.do("led_off"); }],
+    [1, "beep",       () => body.do("beep")],
+  ];
+  const TOTAL_W = FIDGETS.reduce((s, f) => s + f[0], 0);
+  function pick() {
+    let r = Math.random() * TOTAL_W;
+    for (const f of FIDGETS) { if ((r -= f[0]) < 0) return f; }
+    return FIDGETS[0];
+  }
+  let timer = null, running = false;
+  function schedule() {
+    const gap = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP);
+    timer = setTimeout(tick, gap);
+  }
+  async function tick() {
+    if (!running) return;
+    if (!voiceBusy && body.connected) {
+      const [, name, perform] = pick();
+      try {
+        const t0 = performance.now();
+        await perform();
+        logEvent("Idle fidget", name, performance.now() - t0, "y", `idle body=${body.name}`);
+      } catch (e) {
+        logEvent("Idle error", name, null, "n", `idle err=${e.message.slice(0, 120)}`);
+      }
+    }
+    if (running) schedule();
+  }
+  return {
+    get running() { return running; },
+    start() { if (running) return; running = true; schedule(); logEvent("Idle mode", "on", null, "y", `idle body=${body.name}`); },
+    stop()  { if (!running) return; running = false; clearTimeout(timer); logEvent("Idle mode", "off", null, "y", `idle body=${body.name}`); },
+  };
+})();
+
 // ---- UI wiring: talks to the body only through its contract ----
 const statusEl = document.getElementById("status");
 const setStatus = (m, c = "") => { statusEl.textContent = m; statusEl.className = c; };
 const talkBtn = document.getElementById("talk");
+const idleBtn = document.getElementById("idleBtn");
 
-body.onDrop(() => { talkBtn.disabled = true; setStatus("Disconnected.", "err"); });
+function setIdleBtn() {
+  idleBtn.textContent = idle.running ? "🐾 Idle mode: ON (fidgeting)" : "😴 Idle mode: OFF";
+  idleBtn.classList.toggle("on", idle.running);
+}
+idleBtn.onclick = () => { idle.running ? idle.stop() : idle.start(); setIdleBtn(); };
+
+body.onDrop(() => {
+  idle.stop(); setIdleBtn();
+  talkBtn.disabled = true; idleBtn.disabled = true;
+  setStatus("Disconnected.", "err");
+});
 
 document.getElementById("connect").onclick = async () => {
   try {
     setStatus("Pick DROID in the chooser…");
     await body.connect();
-    talkBtn.disabled = false;
+    talkBtn.disabled = false; idleBtn.disabled = false;
     setStatus("Ready. Tap Talk and speak to your droid.", "ok");
   } catch (e) { setStatus("Error: " + e.message, "err"); }
 };
@@ -268,12 +331,15 @@ talkBtn.onclick = () => {
   if (!SR) { setStatus("Speech recognition unavailable in this browser.", "err"); return; }
   const rec = new SR();
   rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+  voiceBusy = true;                       // idle yields while we listen/think/react
+  let gotResult = false;
   talkBtn.classList.add("listening"); talkBtn.textContent = "🔴 Listening…";
   trEl.textContent = "";
   const reset = () => { talkBtn.classList.remove("listening"); talkBtn.textContent = "🎤 Talk to BB-8"; };
-  rec.onerror = e => { reset(); setStatus("Mic error: " + e.error, "err"); };
+  rec.onerror = e => { reset(); voiceBusy = false; setStatus("Mic error: " + e.error, "err"); };
   rec.onresult = async e => {
     reset();
+    gotResult = true;
     const tUtter = performance.now();                       // utterance end ≈ result arrival
     const heard = e.results[0][0].transcript;
     const model = modelEl.value.trim();
@@ -294,9 +360,11 @@ talkBtn.onclick = () => {
     } catch (err) {
       setStatus("Error: " + err.message, "err");
       logEvent("Voice error", "", null, "n", `heard="${heard}" model="${model}" err=${err.message.slice(0,150)}`);
+    } finally {
+      voiceBusy = false;                  // idle may resume
     }
   };
-  rec.onend = reset;
+  rec.onend = () => { reset(); if (!gotResult) voiceBusy = false; };
   rec.start();
 };
 renderLog();

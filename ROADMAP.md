@@ -34,7 +34,7 @@ Formalize BLE control as a swappable interface (modularity requirement — body 
 
 **Work items (in order):**
 1. ~~Validate v3 voice loop on-unit~~ **DONE 2026-07-09** — 12/12 voice reactions parse-clean, all attempt=1 (`droid_voice_log_v3_validation.csv`). 3 leading Gemini 503s excluded per agreed criteria (upstream overload, not a v3 failure). NEW LATENCY BASELINE: utterance→reaction 793–1285 ms (Gemini 687–1148 ms, BLE ~100–180 ms) — ~3x better than Phase 1's 2330–3690 ms. Gap: CSV doesn't record which Gemini model ran — stamp model string into rows in next page rev (v4).
-2. Body driver seam — gather CMD/ACTIONS/connect/framing into one object (`body.connect()`, `body.do(action)`, `body.onDrop()`); command vocabulary is already complete, this is structure only. Phase 3 test: a new body = one new object, zero brain changes.
+2. ~~Body driver seam~~ **DONE 2026-07-09 (v4)** — everything droid-specific lives in one `body` object (`connect()`, `do(word)`, `stopAll()`, `onDrop(cb)`, `actions()`, ACK latency probe). Seam rule: brain sequences BETWEEN actions; body owns execution WITHIN an action (auto-stop = body reflex; timing constants = body config). System prompt now generated from `body.actions()`. v4 stamps model + body into every CSV row. Verified: frames byte-identical to confirmed hexes; on-unit smoke test 3/3 (`droid_voice_log (3).csv` rows, latency 906–1335 ms on baseline). Phase 3 test stands: new body = one new object, zero brain changes.
 3. Idle state machine — random fidgets on timers (head turns, blinks, occasional beep), pure algorithm, zero API calls.
 4. Reconnect/error handling — detect BLE drops, auto-reconnect + re-init, resume idle; voice interrupts yield mid-fidget.
 
