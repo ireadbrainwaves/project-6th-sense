@@ -47,6 +47,8 @@ Formalize BLE control as a swappable interface (modularity requirement — body 
 
 First point where MCU selection (e.g. ESP32-C3), mic/camera pipeline design, and power budget become relevant. Decide: replaces BB-8, or runs alongside it as a second familiar form factor.
 
+**Candidate feature — follow mode (parked here 2026-07-09):** following is closed-loop control and needs relative position sensing; BLE RSSI is the only signal available in Phase 2 and it's unusable (noisy, distance-only, no direction, barely exposed by Web Bluetooth). Requires camera/UWB-class sensing → Phase 3. Feeds the mic/camera seam-side decision.
+
 **Exit criterion:** custom unit matches or beats Phase 2 latency/stability baseline before any new feature is added.
 
 ## Phase 4 — Flagship Platform (blimp)

@@ -48,6 +48,12 @@
 <button id="talk" disabled>🎤 Talk to BB-8</button>
 <button id="stopAll">STOP all motors</button>
 <button id="idleBtn" disabled>😴 Idle mode: OFF</button>
+<div class="row">
+  <button id="spinL" disabled>⟲ Spin</button>
+  <button id="fwd" disabled>▲ Hold: drive</button>
+  <button id="spinR" disabled>⟳ Spin</button>
+</div>
+<div class="hint" style="margin:0 0 8px">Manual drive: hold a button, release to stop (4 s safety cutoff).</div>
 <div id="transcript"></div>
 
 <div class="logbar">
@@ -63,7 +69,7 @@
 
 <script>
 "use strict";
-const VERSION = "v5";   // v5: IDLE STATE MACHINE (Phase 2 item 3) — calm-pet fidgets, zero API calls, toggle button. Bump on EVERY change.
+const VERSION = "v6";   // v6: bounded head rotation (contract fix — UNTESTED stop packet), LED-on connect indicator, manual control panel. Bump on EVERY change.
 const SCRIPT_NAME = "bb8_voice_" + VERSION;
 document.getElementById("ver").textContent = VERSION;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -105,15 +111,16 @@ const body = (() => {
     sound:  () => audio(24, "00"),
     volume: l => audio(14, intToHex(l)),
     rotate: back => multi(4, (back ? "ff" : "00") + intToHex(120) + intToHex(300) + "0000"),
+    rotateStop: () => multi(4, "0000" + intToHex(300) + "0000"),   // zero-speed rotate = stop head (v6 fix — on-unit test pending)
     drive:  (m, spd) => buildCommand(5, "0" + m + intToHex(spd) + intToHex(300) + "0000"),
     stop:   m => buildCommand(5, "0" + m + "00" + intToHex(300) + "0000"),
   };
   const INIT_SEQUENCE = ["222001", "27420f4444001f00", "27420f4444001802"];
 
   // -- reflex config: timing/speed are the body's business, not the brain's --
-  const DRIVE_MS = 700, SPIN_MS = 600, SPEED = 80;
+  const DRIVE_MS = 700, SPIN_MS = 600, LOOK_MS = 600, SPEED = 80, MAX_MANUAL_MS = 4000;
 
-  let writeChar = null, dropCb = null, _firstAckAt = null;
+  let writeChar = null, dropCb = null, _firstAckAt = null, manualTimer = null;
 
   async function write(pkt) {
     if (!writeChar) throw new Error("body not connected");
@@ -130,8 +137,8 @@ const body = (() => {
     beep:       async () => write(CMD.sound()),
     led_on:     async () => write(CMD.ledOn()),
     led_off:    async () => write(CMD.ledOff()),
-    look_left:  async () => write(CMD.rotate(false)),
-    look_right: async () => write(CMD.rotate(true)),
+    look_left:  async () => { const a = await write(CMD.rotate(false)); await sleep(LOOK_MS); await write(CMD.rotateStop()); return a; },
+    look_right: async () => { const a = await write(CMD.rotate(true));  await sleep(LOOK_MS); await write(CMD.rotateStop()); return a; },
     drive:      async () => { const a = await write(CMD.drive(0, SPEED)); await write(CMD.drive(1, SPEED)); await sleep(DRIVE_MS); await write(CMD.stop(0)); await write(CMD.stop(1)); return a; },
     spin:       async () => { const a = await write(CMD.drive(0, SPEED)); await sleep(SPIN_MS); await write(CMD.stop(0)); return a; },
   };
@@ -155,12 +162,26 @@ const body = (() => {
       const service = await server.getPrimaryService(SERVICE_UUID);
       writeChar = await service.getCharacteristic(WRITE_UUID);
       for (let i = 0; i < 3; i++) for (const p of INIT_SEQUENCE) { await write(hexToBytes(p)); await sleep(100); }
+      await write(CMD.ledOn());   // eyes open when awake: lit head = "connected to phone" (v6)
     },
     async do(word) {
       if (!(word in ACTIONS)) throw new Error("unknown action: " + word);
       return ACTIONS[word]();
     },
-    async stopAll() { if (writeChar) { await write(CMD.stop(0)); await write(CMD.stop(1)); } },
+    async stopAll() { if (writeChar) { await write(CMD.stop(0)); await write(CMD.stop(1)); await write(CMD.rotateStop()); } },
+    // -- manual (held) motion: starts on demand, body still owns the safety net (watchdog cutoff) --
+    manualStart(kind) {
+      if (!writeChar || manualTimer) return;
+      manualTimer = setTimeout(() => this.manualStop(), MAX_MANUAL_MS);
+      if (kind === "forward") { write(CMD.drive(0, SPEED)); write(CMD.drive(1, SPEED)); }
+      else if (kind === "spin_left")  { write(CMD.drive(0, SPEED)); }
+      else if (kind === "spin_right") { write(CMD.drive(1, SPEED)); }
+    },
+    manualStop() {
+      if (!manualTimer) return;
+      clearTimeout(manualTimer); manualTimer = null;
+      if (writeChar) { write(CMD.stop(0)); write(CMD.stop(1)); }
+    },
     onDrop(cb) { dropCb = cb; },
     armAckStamp() { _firstAckAt = null; },
     get firstAckAt() { return _firstAckAt; },
@@ -260,7 +281,7 @@ const idle = (() => {
   const FIDGETS = [   // [weight, name, perform]
     [4, "look_left",  () => body.do("look_left")],
     [4, "look_right", () => body.do("look_right")],
-    [3, "blink",      async () => { await body.do("led_on"); await sleep(400); await body.do("led_off"); }],
+    [3, "blink",      async () => { await body.do("led_off"); await sleep(250); await body.do("led_on"); }],   // lights live ON; blink = brief off (v6)
     [1, "beep",       () => body.do("beep")],
   ];
   const TOTAL_W = FIDGETS.reduce((s, f) => s + f[0], 0);
@@ -307,9 +328,23 @@ function setIdleBtn() {
 }
 idleBtn.onclick = () => { idle.running ? idle.stop() : idle.start(); setIdleBtn(); };
 
+// -- manual drive: hold to move, release to stop; body's watchdog is the backstop --
+const manualBtns = ["spinL", "fwd", "spinR"].map(id => document.getElementById(id));
+function wireHold(el, kind) {
+  let t0 = null;
+  const start = e => { e.preventDefault(); if (!body.connected || t0) return; t0 = performance.now(); voiceBusy = true; body.manualStart(kind); };
+  const stop = () => { if (t0 === null) return; body.manualStop(); voiceBusy = false;
+    logEvent("Manual drive", kind, performance.now() - t0, "y", `held=${(performance.now() - t0).toFixed(0)}ms body=${body.name}`); t0 = null; };
+  el.addEventListener("pointerdown", start);
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) el.addEventListener(ev, stop);
+}
+wireHold(manualBtns[0], "spin_left"); wireHold(manualBtns[1], "forward"); wireHold(manualBtns[2], "spin_right");
+
+const setControls = on => { talkBtn.disabled = !on; idleBtn.disabled = !on; manualBtns.forEach(b => b.disabled = !on); };
+
 body.onDrop(() => {
   idle.stop(); setIdleBtn();
-  talkBtn.disabled = true; idleBtn.disabled = true;
+  setControls(false);
   setStatus("Disconnected.", "err");
 });
 
@@ -317,8 +352,8 @@ document.getElementById("connect").onclick = async () => {
   try {
     setStatus("Pick DROID in the chooser…");
     await body.connect();
-    talkBtn.disabled = false; idleBtn.disabled = false;
-    setStatus("Ready. Tap Talk and speak to your droid.", "ok");
+    setControls(true);
+    setStatus("Ready. Lights on = connected. Talk, hold-to-drive, or let it idle.", "ok");
   } catch (e) { setStatus("Error: " + e.message, "err"); }
 };
 document.getElementById("stopAll").onclick = () => body.stopAll();
