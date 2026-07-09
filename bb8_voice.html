@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>6th Sense — voice loop (Phase 1 MVP)</title>
+<title>6th Sense — voice loop (Phase 2)</title>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; max-width: 720px; margin-inline: auto; }
@@ -33,12 +33,12 @@
 </head>
 <body>
 <h1>6th Sense — voice loop <span id="ver"></span></h1>
-<div class="sub">Phase 1 MVP: speak → Gemini decides → BB-8 reacts. Utterance→reaction latency auto-logged.</div>
+<div class="sub">Phase 2: brain (speech→Gemini) ↔ body (BLE driver) across a hard seam. Latency auto-logged.</div>
 
 <details>
   <summary>Setup: Gemini API key + model (stored only in this browser)</summary>
   <div class="row" style="margin-top:8px"><input id="apiKey" type="password" placeholder="Gemini API key (from aistudio.google.com)"></div>
-  <div class="row"><input id="model" value="gemini-3.5-flash" placeholder="model name"></div>
+  <div class="row"><input id="model" value="gemini-3.1-flash-lite" placeholder="model name"></div>
 </details>
 
 <div id="status">1) Enter API key. 2) Connect droid. 3) Hold nothing — just tap Talk and speak.</div>
@@ -56,61 +56,122 @@
   <thead><tr><th>time</th><th>heard</th><th>actions</th><th>utter→react ms</th></tr></thead>
   <tbody id="logBody"></tbody>
 </table>
-<div class="hint">CSV columns match droid_activity_log.csv. ack_ms = utterance-end → first BLE ACK (the Phase 1 exit-criterion number). Breakdown in notes.</div>
+<div class="hint">CSV columns match droid_activity_log.csv. ack_ms = utterance-end → first BLE ACK. Model + body driver stamped in notes.</div>
 
 <script>
 "use strict";
-// ---- framing rule (byte-identical to bb8_command_test.py, verified) ----
-const SERVICE_UUID = "09b600a0-3e42-41fc-b474-e9c0c8f0c801";
-const WRITE_UUID   = "09b600b1-3e42-41fc-b474-e9c0c8f0c801";
-const NOTIFY_UUID  = "09b600b0-3e42-41fc-b474-e9c0c8f0c801";
-const VERSION = "v3";   // bump on EVERY change — shows in header + every log row, so the CSV proves which build ran
-const SCRIPT_NAME  = "bb8_voice_" + VERSION;
+const VERSION = "v4";   // v4: BODY DRIVER SEAM (Phase 2 item 2) + model string logged in every row. Bump on EVERY change.
+const SCRIPT_NAME = "bb8_voice_" + VERSION;
 document.getElementById("ver").textContent = VERSION;
-
-const intToHex = n => { const h = n.toString(16); return h.length % 2 ? "0" + h : h; };
-const hexToBytes = hx => Uint8Array.from((hx.match(/../g) || []).map(b => parseInt(b, 16)));
-function buildCommand(id, data = "") {
-  const dl = data.length / 2;
-  return Uint8Array.from([ (dl + 3) | 0x20, id === 15 ? 0x42 : 0x00, id, dl + 0x40, ...hexToBytes(data) ]);
-}
-const multi = (s, d = "") => buildCommand(15, "44" + String(s).padStart(2, "0") + d);
-const audio = (c, d = "00") => multi(0, intToHex(c) + d);
-const CMD = {
-  ledOn:   () => audio(72, "01"),
-  ledOff:  () => audio(73, "01"),
-  sound:   () => audio(24, "00"),
-  volume:  l => audio(14, intToHex(l)),
-  rotate:  back => multi(4, (back ? "ff" : "00") + intToHex(120) + intToHex(300) + "0000"),
-  drive:   (m, spd) => buildCommand(5, "0" + m + intToHex(spd) + intToHex(300) + "0000"),
-  stop:    m => buildCommand(5, "0" + m + "00" + intToHex(300) + "0000"),
-};
-const INIT_SEQUENCE = ["222001", "27420f4444001f00", "27420f4444001802"];
-
-// ---- the droid's action vocabulary (only on-unit-confirmed commands) ----
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-let writeChar = null;
-let firstAckAt = null;   // stamped at the FIRST write ACK of each voice run — the real "reaction" moment
-async function writeCmd(pkt) {
-  const t0 = performance.now();
-  if (writeChar.writeValueWithResponse) await writeChar.writeValueWithResponse(pkt);
-  else await writeChar.writeValue(pkt);
-  if (firstAckAt === null) firstAckAt = performance.now();
-  return performance.now() - t0;
-}
-const ACTIONS = {
-  beep:        async () => writeCmd(CMD.sound()),
-  led_on:      async () => writeCmd(CMD.ledOn()),
-  led_off:     async () => writeCmd(CMD.ledOff()),
-  look_left:   async () => writeCmd(CMD.rotate(false)),
-  look_right:  async () => writeCmd(CMD.rotate(true)),
-  drive:       async () => { const a = await writeCmd(CMD.drive(0, 80)); await writeCmd(CMD.drive(1, 80)); await sleep(700); await writeCmd(CMD.stop(0)); await writeCmd(CMD.stop(1)); return a; },
-  spin:        async () => { const a = await writeCmd(CMD.drive(0, 80)); await sleep(600); await writeCmd(CMD.stop(0)); return a; },
-};
 
-// ---- Gemini (request-response) ----
+/* =====================================================================
+   BODY — the seam. Everything droid-specific lives inside this object.
+   Phase 3 test: a new body (ESP32, blimp, …) = rewrite THIS object only;
+   the brain below must not change.
+
+   Contract:
+     name           driver id string, stamped into every CSV row
+     actions()      {word: description} — vocabulary the body GUARANTEES.
+                    body.do(word) resolves only when the action is SAFELY
+                    complete — auto-stop is the body's reflex, never the
+                    brain's plan. Timing constants are body-owned config.
+     connect()      chooser + init handshake; resolves when body is ready
+     connected      bool
+     do(word)       perform one vocabulary word
+     stopAll()      reflex: halt all motors immediately
+     onDrop(cb)     cb fires once if the connection is lost
+     armAckStamp()  arm the latency probe…
+     firstAckAt     …timestamp of first write-ACK since arming (or null)
+   ===================================================================== */
+const body = (() => {
+  // -- BB-8 Droid Depot protocol (confirmed on-unit, Phase 0) --
+  const SERVICE_UUID = "09b600a0-3e42-41fc-b474-e9c0c8f0c801";
+  const WRITE_UUID   = "09b600b1-3e42-41fc-b474-e9c0c8f0c801";
+  const intToHex = n => { const h = n.toString(16); return h.length % 2 ? "0" + h : h; };
+  const hexToBytes = hx => Uint8Array.from((hx.match(/../g) || []).map(b => parseInt(b, 16)));
+  function buildCommand(id, data = "") {
+    const dl = data.length / 2;
+    return Uint8Array.from([ (dl + 3) | 0x20, id === 15 ? 0x42 : 0x00, id, dl + 0x40, ...hexToBytes(data) ]);
+  }
+  const multi = (s, d = "") => buildCommand(15, "44" + String(s).padStart(2, "0") + d);
+  const audio = (c, d = "00") => multi(0, intToHex(c) + d);
+  const CMD = {
+    ledOn:  () => audio(72, "01"),
+    ledOff: () => audio(73, "01"),
+    sound:  () => audio(24, "00"),
+    volume: l => audio(14, intToHex(l)),
+    rotate: back => multi(4, (back ? "ff" : "00") + intToHex(120) + intToHex(300) + "0000"),
+    drive:  (m, spd) => buildCommand(5, "0" + m + intToHex(spd) + intToHex(300) + "0000"),
+    stop:   m => buildCommand(5, "0" + m + "00" + intToHex(300) + "0000"),
+  };
+  const INIT_SEQUENCE = ["222001", "27420f4444001f00", "27420f4444001802"];
+
+  // -- reflex config: timing/speed are the body's business, not the brain's --
+  const DRIVE_MS = 700, SPIN_MS = 600, SPEED = 80;
+
+  let writeChar = null, dropCb = null, _firstAckAt = null;
+
+  async function write(pkt) {
+    if (!writeChar) throw new Error("body not connected");
+    const t0 = performance.now();
+    if (writeChar.writeValueWithResponse) await writeChar.writeValueWithResponse(pkt);
+    else await writeChar.writeValue(pkt);
+    if (_firstAckAt === null) _firstAckAt = performance.now();
+    return performance.now() - t0;
+  }
+
+  // Every action is a self-terminating "muscle twitch": it resolves only
+  // when the droid is back in a safe state (stops included).
+  const ACTIONS = {
+    beep:       async () => write(CMD.sound()),
+    led_on:     async () => write(CMD.ledOn()),
+    led_off:    async () => write(CMD.ledOff()),
+    look_left:  async () => write(CMD.rotate(false)),
+    look_right: async () => write(CMD.rotate(true)),
+    drive:      async () => { const a = await write(CMD.drive(0, SPEED)); await write(CMD.drive(1, SPEED)); await sleep(DRIVE_MS); await write(CMD.stop(0)); await write(CMD.stop(1)); return a; },
+    spin:       async () => { const a = await write(CMD.drive(0, SPEED)); await sleep(SPIN_MS); await write(CMD.stop(0)); return a; },
+  };
+  const DESCRIPTIONS = {
+    beep: "chirp a droid sound", led_on: "head light on", led_off: "head light off",
+    look_left: "turn head left", look_right: "turn head right",
+    drive: "roll forward briefly (auto-stops)", spin: "pivot in place (auto-stops)",
+  };
+
+  return {
+    name: "bb8_droid_depot",
+    get connected() { return !!writeChar; },
+    actions: () => ({ ...DESCRIPTIONS }),
+    async connect() {
+      if (!navigator.bluetooth) throw new Error("Web Bluetooth unavailable — use Chrome over HTTPS.");
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: "DROID" }, { services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID],
+      });
+      device.addEventListener("gattserverdisconnected", () => { writeChar = null; if (dropCb) dropCb(); });
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      writeChar = await service.getCharacteristic(WRITE_UUID);
+      for (let i = 0; i < 3; i++) for (const p of INIT_SEQUENCE) { await write(hexToBytes(p)); await sleep(100); }
+    },
+    async do(word) {
+      if (!(word in ACTIONS)) throw new Error("unknown action: " + word);
+      return ACTIONS[word]();
+    },
+    async stopAll() { if (writeChar) { await write(CMD.stop(0)); await write(CMD.stop(1)); } },
+    onDrop(cb) { dropCb = cb; },
+    armAckStamp() { _firstAckAt = null; },
+    get firstAckAt() { return _firstAckAt; },
+  };
+})();
+
+/* =====================================================================
+   BRAIN — speech in, intent out. Knows the body ONLY through its
+   contract: body.actions() for the vocabulary, body.do(word) to act.
+   Nothing below this line may mention bytes, BLE, or timing constants.
+   ===================================================================== */
+const VOCAB = body.actions();
 const SYSTEM_PROMPT = `You are BB-8, a small droid: loyal, curious, expressive, a bit sassy. A human just spoke to you. React with your body — you cannot speak words, only act.
-Available actions: beep, led_on, led_off, look_left, look_right, drive (roll forward briefly), spin (pivot in place).
+Available actions: ${Object.entries(VOCAB).map(([w, d]) => `${w} (${d})`).join(", ")}.
 Respond with ONLY JSON: {"actions":["...","..."],"mood":"one short word"} — 1 to 3 actions, in the order to perform them. Match the emotional tone of what was said.`;
 
 function extractJson(text) {
@@ -140,7 +201,7 @@ async function askGemini(utterance) {
     const data = await res.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const parsed = extractJson(text);
-    const actions = (parsed?.actions || []).filter(a => a in ACTIONS).slice(0, 3);
+    const actions = (parsed?.actions || []).filter(a => a in VOCAB).slice(0, 3);
     if (actions.length) return { actions, mood: parsed.mood || "", attempt };
     lastErr = "unparseable/empty actions in: " + text.slice(0, 120);
   }
@@ -178,34 +239,28 @@ document.getElementById("clear").onclick = () => { if (confirm("Clear the local 
 // ---- persistence for key/model ----
 const keyEl = document.getElementById("apiKey"), modelEl = document.getElementById("model");
 keyEl.value = localStorage.getItem("gemini_key") || "";
-modelEl.value = localStorage.getItem("gemini_model") || "gemini-3.5-flash";
+modelEl.value = localStorage.getItem("gemini_model") || "gemini-3.1-flash-lite";
 keyEl.onchange = () => localStorage.setItem("gemini_key", keyEl.value.trim());
 modelEl.onchange = () => localStorage.setItem("gemini_model", modelEl.value.trim());
 
-// ---- BLE connect ----
+// ---- UI wiring: talks to the body only through its contract ----
 const statusEl = document.getElementById("status");
 const setStatus = (m, c = "") => { statusEl.textContent = m; statusEl.className = c; };
+const talkBtn = document.getElementById("talk");
+
+body.onDrop(() => { talkBtn.disabled = true; setStatus("Disconnected.", "err"); });
+
 document.getElementById("connect").onclick = async () => {
   try {
-    if (!navigator.bluetooth) { setStatus("Web Bluetooth unavailable — use Chrome over HTTPS.", "err"); return; }
     setStatus("Pick DROID in the chooser…");
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: "DROID" }, { services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID],
-    });
-    device.addEventListener("gattserverdisconnected", () => { writeChar = null; document.getElementById("talk").disabled = true; setStatus("Disconnected.", "err"); });
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(SERVICE_UUID);
-    writeChar = await service.getCharacteristic(WRITE_UUID);
-    setStatus("Connected. Sending init…", "ok");
-    for (let i = 0; i < 3; i++) for (const p of INIT_SEQUENCE) { await writeCmd(hexToBytes(p)); await sleep(100); }
-    document.getElementById("talk").disabled = false;
+    await body.connect();
+    talkBtn.disabled = false;
     setStatus("Ready. Tap Talk and speak to your droid.", "ok");
   } catch (e) { setStatus("Error: " + e.message, "err"); }
 };
-document.getElementById("stopAll").onclick = async () => { if (writeChar) { await writeCmd(CMD.stop(0)); await writeCmd(CMD.stop(1)); } };
+document.getElementById("stopAll").onclick = () => body.stopAll();
 
 // ---- push-to-talk: Web Speech API ----
-const talkBtn = document.getElementById("talk");
 const trEl = document.getElementById("transcript");
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -221,6 +276,7 @@ talkBtn.onclick = () => {
     reset();
     const tUtter = performance.now();                       // utterance end ≈ result arrival
     const heard = e.results[0][0].transcript;
+    const model = modelEl.value.trim();
     trEl.textContent = "“" + heard + "”";
     setStatus("Thinking…");
     try {
@@ -228,16 +284,16 @@ talkBtn.onclick = () => {
       const { actions, mood, attempt } = await askGemini(heard);
       const geminiMs = performance.now() - tG0;
       setStatus("Reacting: " + actions.join(" → ") + (mood ? "  (" + mood + ")" : ""), "ok");
-      firstAckAt = null;                                    // arm the first-ACK stamp
-      await ACTIONS[actions[0]]();
-      const utterToReact = (firstAckAt ?? performance.now()) - tUtter;  // THE Phase 1 number: utterance end -> first ACK
-      const bleMs = firstAckAt ? (firstAckAt - tG0 - geminiMs) : 0;
-      for (const a of actions.slice(1)) { await ACTIONS[a](); await sleep(150); }
+      body.armAckStamp();                                   // arm the first-ACK latency probe
+      await body.do(actions[0]);
+      const utterToReact = (body.firstAckAt ?? performance.now()) - tUtter;  // utterance end -> first ACK
+      const bleMs = body.firstAckAt ? (body.firstAckAt - tG0 - geminiMs) : 0;
+      for (const a of actions.slice(1)) { await body.do(a); await sleep(150); }
       logEvent("Voice reaction", actions.join("+"), utterToReact, "y",
-        `heard="${heard}" mood="${mood}" gemini=${geminiMs.toFixed(0)}ms ble=${bleMs.toFixed(0)}ms attempt=${attempt} total=${utterToReact.toFixed(0)}ms`);
+        `heard="${heard}" mood="${mood}" model="${model}" body=${body.name} gemini=${geminiMs.toFixed(0)}ms ble=${bleMs.toFixed(0)}ms attempt=${attempt} total=${utterToReact.toFixed(0)}ms`);
     } catch (err) {
       setStatus("Error: " + err.message, "err");
-      logEvent("Voice error", "", null, "n", `heard="${heard}" err=${err.message.slice(0,150)}`);
+      logEvent("Voice error", "", null, "n", `heard="${heard}" model="${model}" err=${err.message.slice(0,150)}`);
     }
   };
   rec.onend = reset;

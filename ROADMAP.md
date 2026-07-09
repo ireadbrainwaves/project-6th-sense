@@ -52,7 +52,15 @@ First point where MCU selection (e.g. ESP32-C3), mic/camera pipeline design, and
 ## Phase 4 — Flagship Platform (blimp)
 **Status:** not started — blocked on Phase 3. Not to be spec'd before then.
 
-Lift/buoyancy budget, motor/prop power draw vs. battery, onboard vs. tethered compute. No code or component selection happens for this phase until Phase 3 is stable.
+Lift/buoyancy budget, motor/prop power draw vs. battery, onboard vs. tethered compute. No code or component selection happens for this phase until Phase 3 is stable. Full concept in `CO-600 Companion Unit 01 - Design Document.md`.
+
+### Design choices (design-space only — recorded, not spec'd)
+These are form-factor forks to hold in mind, not decisions that unlock hardware buys. They do not violate the phase gate.
+
+- **A — Desk pet (original CO-600 framing).** 60 cm sphere, minimum envelope that flies a real payload. Tension: the boom footprint is still ~100 cm wide (§11), so it doesn't actually clear a doorway or sit on a desk. Smallest, quietest, shortest endurance.
+- **B — Room pet (Austin's preferred direction, 2026-07-09).** Embrace the ~100 cm footprint instead of apologizing for it. The object lives in and moves through a room, not on a desk. Opens the door to a larger or prolate envelope (AR 1.3–1.5, ~80–90 cm long, +~50 g lift for ~8 g film) for more endurance/payload headroom. Changes the station-keeping story: it must hold position against room-scale drafts and doorways, not just a desk-side HVAC breeze — so draft authority and the swing/bob controller (GT-MAB, §13 Q4) matter more. Yaw inertia and where it's allowed to fly (safe zones vs. open windows) become real constraints.
+
+**Consequence to revisit at spec time:** B likely wants the prolate envelope and a firmer answer on the boom-length ↔ draft-authority tradeoff (CO-600 §13 Q5) before any component is chosen.
 
 ## Update Rule
 Change status fields only when the exit criterion is **actually met**, not when work "feels" close. If a phase is in progress, note it, but don't mark done without the criterion satisfied.
