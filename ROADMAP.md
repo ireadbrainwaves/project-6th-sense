@@ -26,14 +26,14 @@ Pixel 10 Fold runs orchestration directly: mic capture → Gemini → response �
 **How it was met (2026-07-08):** 11 voice→reaction successes across two on-unit sessions (`droid_voice_log.csv`, `droid_voice_log_stale_build_session.csv`); utterance→reaction 2.3–3.9 s, Gemini dominates (~2.2–3.3 s), BLE negligible. All failures (5) were Gemini JSON parse errors — root-caused, fixed in v3 (robust extraction + retry), unit-tested against both observed failure modes. **Caveat:** v3 fix not yet validated on-unit (API quota hit); the first Phase 2 session doubles as that validation. If v3 fails on-unit, this phase reopens per the update rule.
 
 ## Phase 2 — Embodiment Hardening
-**Status:** UNBLOCKED — ready to begin (Phase 1 closed 2026-07-08). First session must validate the v3 voice-loop fix on-unit before anything else.
+**Status:** ACTIVE — work item 1 (v3 validation) DONE 2026-07-09; next up: body driver seam.
 
 Formalize BLE control as a swappable interface (modularity requirement — body should be replaceable without touching orchestration code). State management: idle animations, mid-command interrupts, BLE reconnect/error handling.
 
 **Design principle (decided 2026-07-08):** use the cheapest system that produces the behavior. Reflexes (idle fidgets, timers, reconnect) = local algorithms, $0, no Gemini. Cognition (interpreting speech) = Gemini. Audio becomes an *interrupt* to an otherwise algorithmic idle loop.
 
 **Work items (in order):**
-1. Validate v3 voice loop on-unit — 10 paced trials (~10 s apart for API quota); the Phase 1 caveat. If it fails, Phase 1 reopens.
+1. ~~Validate v3 voice loop on-unit~~ **DONE 2026-07-09** — 12/12 voice reactions parse-clean, all attempt=1 (`droid_voice_log_v3_validation.csv`). 3 leading Gemini 503s excluded per agreed criteria (upstream overload, not a v3 failure). NEW LATENCY BASELINE: utterance→reaction 793–1285 ms (Gemini 687–1148 ms, BLE ~100–180 ms) — ~3x better than Phase 1's 2330–3690 ms. Gap: CSV doesn't record which Gemini model ran — stamp model string into rows in next page rev (v4).
 2. Body driver seam — gather CMD/ACTIONS/connect/framing into one object (`body.connect()`, `body.do(action)`, `body.onDrop()`); command vocabulary is already complete, this is structure only. Phase 3 test: a new body = one new object, zero brain changes.
 3. Idle state machine — random fidgets on timers (head turns, blinks, occasional beep), pure algorithm, zero API calls.
 4. Reconnect/error handling — detect BLE drops, auto-reconnect + re-init, resume idle; voice interrupts yield mid-fidget.

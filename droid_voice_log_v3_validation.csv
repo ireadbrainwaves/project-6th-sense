@@ -1,0 +1,25 @@
+timestamp,script,action,command_hex,ack_ms,reacted,notes
+2026-07-09T18:58:37,bb8_voice_v3,Voice error,,,n,"heard=""bb8 move forward"" err=Gemini HTTP 503: {
+  ""error"": {
+    ""code"": 503,
+    ""message"": ""This model is currently experiencing high demand. Spikes in demand are usually tempor"
+2026-07-09T18:59:11,bb8_voice_v3,Voice error,,,n,"heard=""bb-8 turnaround"" err=Gemini HTTP 503: {
+  ""error"": {
+    ""code"": 503,
+    ""message"": ""This model is currently experiencing high demand. Spikes in demand are usually tempor"
+2026-07-09T19:00:04,bb8_voice_v3,Voice error,,,n,"heard=""bb8 move forward"" err=Gemini HTTP 503: {
+  ""error"": {
+    ""code"": 503,
+    ""message"": ""This model is currently experiencing high demand. Spikes in demand are usually tempor"
+2026-07-09T19:00:40,bb8_voice_v3,Voice reaction,drive+beep,1285.4,y,"heard=""bb8 move forward"" mood=""obedient"" gemini=1148ms ble=137ms attempt=1 total=1285ms"
+2026-07-09T19:00:49,bb8_voice_v3,Voice reaction,spin+beep,920.7,y,"heard=""BB turn around"" mood=""obliging"" gemini=764ms ble=157ms attempt=1 total=921ms"
+2026-07-09T19:00:58,bb8_voice_v3,Voice reaction,led_on+spin,995.1,y,"heard=""baby turn on your lights"" mood=""happy"" gemini=819ms ble=176ms attempt=1 total=995ms"
+2026-07-09T19:01:06,bb8_voice_v3,Voice reaction,led_on+beep,919.0,y,"heard=""bb8 turn on lights"" mood=""helpful"" gemini=782ms ble=137ms attempt=1 total=919ms"
+2026-07-09T19:01:14,bb8_voice_v3,Voice reaction,beep+drive,793.4,y,"heard=""bb-8 move forward"" mood=""eager"" gemini=687ms ble=106ms attempt=1 total=793ms"
+2026-07-09T19:01:22,bb8_voice_v3,Voice reaction,spin+beep+led_on,890.9,y,"heard=""BBA say hello"" mood=""cheerful"" gemini=785ms ble=106ms attempt=1 total=891ms"
+2026-07-09T19:01:33,bb8_voice_v3,Voice reaction,drive+drive+drive,967.3,y,"heard="". move forward 19 times"" mood=""determined"" gemini=839ms ble=129ms attempt=1 total=967ms"
+2026-07-09T19:01:44,bb8_voice_v3,Voice reaction,drive+drive+beep,919.3,y,"heard=""move forward two times"" mood=""obedient"" gemini=811ms ble=108ms attempt=1 total=919ms"
+2026-07-09T19:01:54,bb8_voice_v3,Voice reaction,drive+spin,1092.9,y,"heard=""move forward indefinitely"" mood=""eager"" gemini=922ms ble=171ms attempt=1 total=1093ms"
+2026-07-09T19:02:02,bb8_voice_v3,Voice reaction,spin+drive+beep,888.0,y,"heard=""don't stop moving"" mood=""determined"" gemini=720ms ble=168ms attempt=1 total=888ms"
+2026-07-09T19:02:13,bb8_voice_v3,Voice reaction,beep+drive,878.7,y,"heard=""move forward"" mood=""eager"" gemini=767ms ble=112ms attempt=1 total=879ms"
+2026-07-09T19:02:22,bb8_voice_v3,Voice reaction,look_left+look_right+spin,959.3,y,"heard=""move backwards"" mood=""confused"" gemini=809ms ble=150ms attempt=1 total=959ms"
