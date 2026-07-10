@@ -2,6 +2,8 @@
 
 Each phase is gated. **Do not spec or design a later phase's hardware/software until the current phase's exit criterion is met.** This file exists specifically to catch scope-creep against a written gate instead of momentum.
 
+> **This file is parsed live by the public build-log site** (`docs/index.html` → https://ireadbrainwaves.github.io/project-6th-sense/). The site reads each `**Status:**` line for the phase badges, and counts numbered work items with `~~strikethrough~~` or `DONE` as complete for the progress bar — keep those conventions when editing.
+
 ## Phase 0 — Protocol Confirmation
 **Status:** ✅ COMPLETE — exit criterion met 2026-07-07 (see `6th_sense_protocol_notes.md`, `6TH_SENSE_HUB.md`, `droid_activity_log.csv`)
 
@@ -26,7 +28,7 @@ Pixel 10 Fold runs orchestration directly: mic capture → Gemini → response �
 **How it was met (2026-07-08):** 11 voice→reaction successes across two on-unit sessions (`droid_voice_log.csv`, `droid_voice_log_stale_build_session.csv`); utterance→reaction 2.3–3.9 s, Gemini dominates (~2.2–3.3 s), BLE negligible. All failures (5) were Gemini JSON parse errors — root-caused, fixed in v3 (robust extraction + retry), unit-tested against both observed failure modes. **Caveat:** v3 fix not yet validated on-unit (API quota hit); the first Phase 2 session doubles as that validation. If v3 fails on-unit, this phase reopens per the update rule.
 
 ## Phase 2 — Embodiment Hardening
-**Status:** ACTIVE — work item 1 (v3 validation) DONE 2026-07-09; next up: body driver seam.
+**Status:** ACTIVE — work items 1–3 built/DONE, item 4 built (v9, on-unit test pending); D-pad + stop-burst shipped (v8, on-unit test pending). Remaining to close the gate: one clean, continuous, unattended 30-min idle run (see Progress note) + the pending on-unit validations.
 
 Formalize BLE control as a swappable interface (modularity requirement — body should be replaceable without touching orchestration code). State management: idle animations, mid-command interrupts, BLE reconnect/error handling.
 
@@ -35,7 +37,7 @@ Formalize BLE control as a swappable interface (modularity requirement — body 
 **Work items (in order):**
 1. ~~Validate v3 voice loop on-unit~~ **DONE 2026-07-09** — 12/12 voice reactions parse-clean, all attempt=1 (`droid_voice_log_v3_validation.csv`). 3 leading Gemini 503s excluded per agreed criteria (upstream overload, not a v3 failure). NEW LATENCY BASELINE: utterance→reaction 793–1285 ms (Gemini 687–1148 ms, BLE ~100–180 ms) — ~3x better than Phase 1's 2330–3690 ms. Gap: CSV doesn't record which Gemini model ran — stamp model string into rows in next page rev (v4).
 2. ~~Body driver seam~~ **DONE 2026-07-09 (v4)** — everything droid-specific lives in one `body` object (`connect()`, `do(word)`, `stopAll()`, `onDrop(cb)`, `actions()`, ACK latency probe). Seam rule: brain sequences BETWEEN actions; body owns execution WITHIN an action (auto-stop = body reflex; timing constants = body config). System prompt now generated from `body.actions()`. v4 stamps model + body into every CSV row. Verified: frames byte-identical to confirmed hexes; on-unit smoke test 3/3 (`droid_voice_log (3).csv` rows, latency 906–1335 ms on baseline). Phase 3 test stands: new body = one new object, zero brain changes.
-3. Idle state machine — random fidgets on timers (head turns, blinks, occasional beep), pure algorithm, zero API calls.
+3. ~~Idle state machine~~ **BUILT, ran on-unit 2026-07-09** — random fidgets on timers (head turns, blinks, occasional beep), pure algorithm, zero API calls. Evidence: idle fidgets ran interleaved with voice + drive throughout the ~46-min v7 session (`droid_voice_log_v7_session.csv`, 0 failures); the mid-action race originally deferred from this item was closed by the v9 `body.interrupt()` work (item 4). Not the same as the exit-gate run — that still needs one unbroken unattended 30-min block.
 4. ~~Reconnect/error handling~~ **BUILT 2026-07-09 (v9, on-unit test pending)** — detect BLE drops, auto-reconnect + re-init, resume idle; voice interrupts yield mid-fidget. Implemented: the `body` retains the paired `device` and reconnects via `device.gatt.connect()` (no chooser / no user gesture), re-runs the init handshake, and relights the head as the visible "back online" signal. Auto-reconnect is a body reflex with exponential backoff (6 tries, 400 ms→4 s cap); it reports `trying/ok/fail/giveup` via `onReconnect(cb)`. Brain side resumes idle **only if it was running** at drop time. Mid-action interrupt added: long actions use a cancellable `abortSleep`, and voice/drive both call `body.interrupt()` to cut an in-flight idle fidget cleanly (closes the "known race" deferred from item 3). Drops and reconnects are logged (`Disconnect`/`Reconnect` rows) so the 30-min gate is provable by CSV. **On-unit test pending:** force a real drop (walk out of range / power-cycle remote) and confirm auto-reconnect + idle resume; this is also the natural driver for a clean 30-min endurance run.
 
 **TODO (field feedback 2026-07-09, v7):**
