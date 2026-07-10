@@ -204,6 +204,18 @@
   .chip{font-family:var(--mono); font-size:.68rem; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--mute)}
   .chip.b{color:var(--blue); border-color:rgba(74,163,255,.35); background:rgba(74,163,255,.07)}
 
+  /* ---------- tools launcher ---------- */
+  .toolgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  @media(max-width:840px){.toolgrid{grid-template-columns:1fr}}
+  .toolcard{display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px; transition:.2s; position:relative; overflow:hidden}
+  .toolcard::before{content:""; position:absolute; left:0; top:0; width:100%; height:2px; background:linear-gradient(90deg,var(--amber),transparent 70%); opacity:.75}
+  .toolcard:hover{transform:translateY(-3px); border-color:rgba(255,122,26,.4); box-shadow:0 12px 28px rgba(0,0,0,.4)}
+  .toolcard h4{font-family:var(--disp); font-weight:600; font-size:1.05rem; margin:0 0 8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .toolcard h4 .tag{font-family:var(--mono); font-size:.58rem; color:var(--amber); border:1px solid var(--line); border-radius:5px; padding:2px 6px; letter-spacing:.12em}
+  .toolcard p{margin:0 0 14px; font-size:.88rem; color:#c7c5bf; flex:1}
+  .toolcard .file{font-family:var(--mono); font-size:.66rem; color:var(--mute); margin-bottom:12px}
+  .toolnote{font-family:var(--mono); font-size:.72rem; color:var(--mute); margin-top:16px}
+
   /* ---------- CO-600 brief ---------- */
   .brief{display:grid; grid-template-columns:1fr 1fr; gap:22px}
   @media(max-width:840px){.brief{grid-template-columns:1fr}}
@@ -241,6 +253,7 @@
     <div class="brandmark"></div>
     <b>PROJECT · 6TH&nbsp;SENSE</b>
     <nav id="topnav">
+      <a href="#tools">Tools</a>
       <a href="#status">Status</a>
       <a href="#roadmap">Roadmap</a>
       <a href="#telemetry">Telemetry</a>
@@ -326,6 +339,35 @@
     </div>
   </div>
 </div>
+
+<!-- ===================== TOOLS LAUNCHER ===================== -->
+<section id="tools">
+  <div class="ghostno">00</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">00</span><h2>Mission Tools</h2><span class="rule"></span><span class="label">served over https · web bluetooth ready</span></div>
+    <div class="toolgrid">
+      <div class="toolcard">
+        <h4>Droid Console <span class="tag">V9 · PHASE 2</span></h4>
+        <div class="file">bb8_voice.html</div>
+        <p>The main controller. Voice loop (mic → Gemini → BLE), 4-way D-pad with deadman auto-stop, idle-mode fidgets, auto-reconnect with backoff, live latency dashboard, CSV logging. Runs on the Pixel in Chrome — HTTPS here means Web Bluetooth connects directly.</p>
+        <a class="btn solid" href="bb8_voice.html">Open console</a>
+      </div>
+      <div class="toolcard">
+        <h4>BLE Bench <span class="tag">PHASE 0/1</span></h4>
+        <div class="file">bb8_web_test.html</div>
+        <p>The raw protocol tester that built the Protocol Map below: connect, fire individual command frames (LED, sound, head rotate, drive, stop), watch ACK timing and notify payloads, export the session as CSV.</p>
+        <a class="btn solid" href="bb8_web_test.html">Open bench</a>
+      </div>
+      <div class="toolcard">
+        <h4>Mission Docs <span class="tag">SOURCE</span></h4>
+        <div class="file">github · main</div>
+        <p>The paper trail: gated roadmap, reverse-engineering playbook, protocol notes, hardware inventory, and the full CO-600 design document.</p>
+        <a class="btn" href="https://github.com/ireadbrainwaves/project-6th-sense/blob/main/ROADMAP.md" target="_blank" rel="noopener">Roadmap ↗</a>
+      </div>
+    </div>
+    <p class="toolnote">Console + bench need Chrome or Edge (Web Bluetooth) and the droid powered on nearby. The Gemini API key is pasted at runtime and never stored in the repo or this site.</p>
+  </div>
+</section>
 
 <!-- ===================== LIVE STATUS ===================== -->
 <section id="status">
