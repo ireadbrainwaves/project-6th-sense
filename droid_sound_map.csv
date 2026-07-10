@@ -1,0 +1,24 @@
+bank,track,command_hex,label
+0,0,27 42 0F 44 44 00 18 00,
+0,1,27 42 0F 44 44 00 18 01,hi
+0,2,27 42 0F 44 44 00 18 02,excited almost wow
+0,3,27 42 0F 44 44 00 18 03,trying to figure out what is going on conversational
+0,4,27 42 0F 44 44 00 18 04,nu uh idk what you mean
+1,0,27 42 0F 44 44 00 18 00,wow
+1,1,27 42 0F 44 44 00 18 01,sad idk what to do
+1,2,27 42 0F 44 44 00 18 02,wow this is cool whats going on
+2,0,27 42 0F 44 44 00 18 00,super excited explanatory
+2,1,27 42 0F 44 44 00 18 01,wow this is cool what is going on
+2,2,27 42 0F 44 44 00 18 02,converstion
+4,0,27 42 0F 44 44 00 18 00,super giddy wooooowwww
+5,0,27 42 0F 44 44 00 18 00,converstational
+5,1,27 42 0F 44 44 00 18 01,wow that is crazy
+5,2,27 42 0F 44 44 00 18 02,girl i dont whats going
+5,3,27 42 0F 44 44 00 18 03,sassy
+5,4,27 42 0F 44 44 00 18 04,sassy
+6,0,27 42 0F 44 44 00 18 00,oh man im in trouble
+6,1,27 42 0F 44 44 00 18 01,suprised
+6,2,27 42 0F 44 44 00 18 02,sad disappointed
+6,3,27 42 0F 44 44 00 18 03,aww what
+6,4,27 42 0F 44 44 00 18 04,low energy
+7,0,27 42 0F 44 44 00 18 00,super excited
