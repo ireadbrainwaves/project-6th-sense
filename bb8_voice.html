@@ -43,6 +43,19 @@
   details { margin-bottom: 8px; }
   summary { cursor: pointer; font-size: .9rem; color: gray; }
   .hint { color: gray; font-size: .78rem; margin-top: 8px; }
+  #dash { margin: 10px 0; }
+  #dHead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: .9rem; }
+  #dDot { width: 9px; height: 9px; border-radius: 50%; background: gray; display: inline-block; }
+  #dDot.ok { background: rgba(30,160,90,.9); } #dDot.warn { background: rgba(200,140,40,.95); } #dDot.err { background: rgba(220,60,60,.9); }
+  #dVer { margin-left: auto; font-size: .7rem; color: gray; }
+  .dcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px; }
+  .dcard { background: rgba(128,128,128,.1); border-radius: 8px; padding: 8px 9px; display: flex; flex-direction: column; gap: 2px; }
+  .dcard.dmuted { opacity: .55; }
+  .dl { font-size: .64rem; color: gray; }
+  .dv { font-size: 1.05rem; font-weight: 600; }
+  .dv small { font-size: .62rem; color: gray; font-weight: 400; }
+  #dLast { margin-top: 6px; font-size: .8rem; color: gray; min-height: 1.2em; }
+  #dLast b { color: inherit; font-weight: 600; font-style: normal; }
 </style>
 </head>
 <body>
@@ -70,6 +83,21 @@
 <div class="hint" style="margin:0 0 8px;text-align:center">Hold to drive: ▲ forward, ◀ ▶ pivot (confirmed bytes), ■ = redundant STOP burst. Release (or lose grip) = auto-stop. ▼ reverse fires an <b>unconfirmed candidate byte</b> — logged as <code>dir=back</code> for on-unit decoding.</div>
 <div id="transcript"></div>
 
+<div id="dash">
+  <div id="dHead"><span id="dDot"></span><span id="dConn">Not connected</span><span id="dVer"></span></div>
+  <div class="dcards">
+    <div class="dcard"><span class="dl">Uptime</span><span class="dv" id="dUptime">—</span></div>
+    <div class="dcard"><span class="dl">Commands</span><span class="dv" id="dCmds">0</span></div>
+    <div class="dcard"><span class="dl">Last react</span><span class="dv" id="dLastMs">—</span></div>
+    <div class="dcard"><span class="dl">Last BLE ACK</span><span class="dv" id="dAck">—</span></div>
+    <div class="dcard"><span class="dl">Reconnects</span><span class="dv" id="dRe">0</span></div>
+    <div class="dcard"><span class="dl">Median react</span><span class="dv" id="dMed">—</span></div>
+    <div class="dcard"><span class="dl">Idle</span><span class="dv" id="dIdle">off</span></div>
+    <div class="dcard dmuted"><span class="dl">Battery</span><span class="dv" style="font-size:.7rem">not exposed</span></div>
+  </div>
+  <div id="dLast">No commands yet.</div>
+</div>
+
 <div class="logbar">
   <b style="font-size:.9rem">Interaction log</b>
   <button id="export">Export CSV</button>
@@ -83,7 +111,7 @@
 
 <script>
 "use strict";
-const VERSION = "v8";   // v8: joystick pad -> 4-way D-pad (forward/pivots confirmed bytes, reverse=UNCONFIRMED candidate byte flagged for on-unit test); flaky-STOP fix = redundant stop burst on operator stops. Bump on EVERY change.
+const VERSION = "v11";  // v11: expressive sound vocabulary — 9 emotion-named sounds (on-unit confirmed bank/track from droid_sound_map.csv) folded into body.actions(); brain picks the sound matching its mood. Plays via SetSelectedSoundBank + PlayAudioFromSelectedGroup. Bump on EVERY change.
 const SCRIPT_NAME = "bb8_voice_" + VERSION;
 document.getElementById("ver").textContent = VERSION;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -123,6 +151,8 @@ const body = (() => {
     ledOn:  () => audio(72, "01"),
     ledOff: () => audio(73, "01"),
     sound:  () => audio(24, "00"),
+    selBank:   b => audio(31, intToHex(b)),   // v11: SetSelectedSoundBank
+    playTrack: t => audio(24, intToHex(t)),   // v11: PlayAudioFromSelectedGroup(track)
     volume: l => audio(14, intToHex(l)),
     rotate: back => multi(4, (back ? "ff" : "00") + intToHex(120) + intToHex(300) + "0000"),
     rotateStop: () => multi(4, "0000" + intToHex(300) + "0000"),   // zero-speed rotate = stop head (v6 fix — on-unit test pending)
@@ -139,9 +169,11 @@ const body = (() => {
   const DEADMAN_MS = 500, VEC_MS = 120;                   // D-pad drive reflex config
   const REVERSE_NIBBLE = "1";                             // v8: UNCONFIRMED reverse-drive direction nibble. On-unit: if ▼ doesn't reverse, try "8" then "2".
   const STOP_REPEATS = 3, STOP_GAP_MS = 50;              // v8: flaky-STOP fix — send operator stops as a redundant burst
+  const RECONNECT_TRIES = 6, RECONNECT_BASE_MS = 400, RECONNECT_MAX_MS = 4000;   // v9: auto-reconnect backoff
   let lastVecAt = 0, vecInFlight = false;
 
-  let writeChar = null, dropCb = null, _firstAckAt = null, manualTimer = null;
+  let writeChar = null, dropCb = null, _firstAckAt = null, manualTimer = null, _lastAck = null;
+  let device = null, reconnectCb = null, reconnecting = false, intentional = false, abortToken = 0;   // v9
 
   async function write(pkt) {
     if (!writeChar) throw new Error("body not connected");
@@ -149,7 +181,8 @@ const body = (() => {
     if (writeChar.writeValueWithResponse) await writeChar.writeValueWithResponse(pkt);
     else await writeChar.writeValue(pkt);
     if (_firstAckAt === null) _firstAckAt = performance.now();
-    return performance.now() - t0;
+    _lastAck = performance.now() - t0;   // v10: last write-ACK for the dashboard
+    return _lastAck;
   }
 
   // v8 flaky-STOP fix: a single stop write sometimes didn't land (field report, Phase 0 rows 13-14).
@@ -162,22 +195,100 @@ const body = (() => {
     }
   }
 
+  // v9 mid-action interrupt: bump the token to cut an in-flight action (e.g. an idle fidget) short.
+  // abortSleep is a cancellable sleep — long actions use it so a voice command can yield them mid-motion.
+  function interrupt() { abortToken++; }
+  async function abortSleep(ms) {
+    const tok = abortToken, step = 60; let elapsed = 0;
+    while (elapsed < ms) {
+      if (tok !== abortToken || !writeChar) return false;      // interrupted or dropped → bail, caller still sends its stop
+      await sleep(Math.min(step, ms - elapsed)); elapsed += step;
+    }
+    return tok === abortToken;
+  }
+
+  // v9 connection lifecycle: establish() (re)opens GATT + re-runs the init handshake. It takes NO
+  // user gesture, so it works for both first connect and auto-reconnect (we keep the paired `device`).
+  async function establish() {
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    writeChar = await service.getCharacteristic(WRITE_UUID);
+    for (let i = 0; i < 3; i++) for (const p of INIT_SEQUENCE) { await write(hexToBytes(p)); await sleep(100); }
+    await write(CMD.ledOn());   // lit head = "connected to phone" — also the visible reconnect signal
+  }
+
+  // v9 drop detection: fires on any BLE disconnect. Unintentional drops kick off auto-reconnect.
+  function onGattDrop() {
+    writeChar = null;
+    if (dropCb) dropCb();
+    if (!intentional && device && !reconnecting) autoReconnect();
+  }
+
+  // v9 auto-reconnect reflex: retry establish() with exponential backoff. Pure BLE mechanics (body's
+  // job); the brain resumes idle via the onReconnect("ok") callback. Reports every phase for the UI/CSV.
+  async function autoReconnect() {
+    reconnecting = true;
+    for (let attempt = 1; attempt <= RECONNECT_TRIES; attempt++) {
+      if (intentional || !device) break;
+      const wait = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** (attempt - 1));
+      if (reconnectCb) reconnectCb({ phase: "trying", attempt, tries: RECONNECT_TRIES, wait });
+      await sleep(wait);
+      try {
+        await establish();
+        reconnecting = false;
+        if (reconnectCb) reconnectCb({ phase: "ok", attempt });
+        return;
+      } catch (e) {
+        if (reconnectCb) reconnectCb({ phase: "fail", attempt, error: (e && e.message) || String(e) });
+      }
+    }
+    reconnecting = false;
+    if (reconnectCb) reconnectCb({ phase: "giveup", tries: RECONNECT_TRIES });
+  }
+
+  // v11 EXPRESSIVE SOUNDS — on-unit confirmed (bank, track) pairs from droid_sound_map.csv.
+  // A sound plays by selecting its bank, then firing its track. Named by EMOTION so the brain
+  // (which already returns a mood per reaction) can pick the sound that matches what was said.
+  const SOUND_GAP_MS = 70;   // let the bank-select register before the play (on-unit tunable)
+  async function playSound(bank, track) {
+    const a = await write(CMD.selBank(bank));
+    await abortSleep(SOUND_GAP_MS);
+    await write(CMD.playTrack(track));
+    return a;
+  }
+  const SOUNDS = {   // emotion: [bank, track, description]
+    greet:     [0, 1, "friendly hello chirp"],
+    excited:   [2, 0, "excited, giddy chirps"],
+    wow:       [1, 0, "amazed 'wow' sound"],
+    curious:   [0, 3, "curious, questioning, conversational warble"],
+    confused:  [0, 4, "confused 'huh? no idea what you mean' sound"],
+    sad:       [6, 2, "sad, disappointed sound"],
+    surprised: [6, 1, "surprised sound"],
+    sassy:     [5, 3, "sassy, attitude sound"],
+    worried:   [6, 0, "worried 'uh oh, I'm in trouble' sound"],
+  };
+
   // Every action is a self-terminating "muscle twitch": it resolves only
   // when the droid is back in a safe state (stops included).
   const ACTIONS = {
     beep:       async () => write(CMD.sound()),
     led_on:     async () => write(CMD.ledOn()),
     led_off:    async () => write(CMD.ledOff()),
-    look_left:  async () => { const a = await write(CMD.rotate(false)); await sleep(LOOK_MS); await write(CMD.rotateStop()); return a; },
-    look_right: async () => { const a = await write(CMD.rotate(true));  await sleep(LOOK_MS); await write(CMD.rotateStop()); return a; },
-    drive:      async () => { const a = await write(CMD.drive(0, SPEED)); await write(CMD.drive(1, SPEED)); await sleep(DRIVE_MS); await write(CMD.stop(0)); await write(CMD.stop(1)); return a; },
-    spin:       async () => { const a = await write(CMD.drive(0, SPEED)); await sleep(SPIN_MS); await write(CMD.stop(0)); return a; },
+    look_left:  async () => { const a = await write(CMD.rotate(false)); await abortSleep(LOOK_MS); await write(CMD.rotateStop()); return a; },
+    look_right: async () => { const a = await write(CMD.rotate(true));  await abortSleep(LOOK_MS); await write(CMD.rotateStop()); return a; },
+    drive:      async () => { const a = await write(CMD.drive(0, SPEED)); await write(CMD.drive(1, SPEED)); await abortSleep(DRIVE_MS); await write(CMD.stop(0)); await write(CMD.stop(1)); return a; },
+    spin:       async () => { const a = await write(CMD.drive(0, SPEED)); await abortSleep(SPIN_MS); await write(CMD.stop(0)); return a; },
   };
   const DESCRIPTIONS = {
-    beep: "chirp a droid sound", led_on: "head light on", led_off: "head light off",
+    beep: "chirp a neutral droid sound", led_on: "head light on", led_off: "head light off",
     look_left: "turn head left", look_right: "turn head right",
     drive: "roll forward briefly (auto-stops)", spin: "pivot in place (auto-stops)",
   };
+  // v11: fold the expressive sounds into the vocabulary — brain sees them via body.actions().
+  for (const [name, [bank, track, desc]] of Object.entries(SOUNDS)) {
+    ACTIONS[name] = async () => playSound(bank, track);
+    DESCRIPTIONS[name] = desc;
+  }
 
   return {
     name: "bb8_droid_depot",
@@ -185,21 +296,20 @@ const body = (() => {
     actions: () => ({ ...DESCRIPTIONS }),
     async connect() {
       if (!navigator.bluetooth) throw new Error("Web Bluetooth unavailable — use Chrome over HTTPS.");
-      const device = await navigator.bluetooth.requestDevice({
+      intentional = false;
+      device = await navigator.bluetooth.requestDevice({      // chooser needs a user gesture — only here, not on reconnect
         filters: [{ namePrefix: "DROID" }, { services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID],
       });
-      device.addEventListener("gattserverdisconnected", () => { writeChar = null; if (dropCb) dropCb(); });
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(SERVICE_UUID);
-      writeChar = await service.getCharacteristic(WRITE_UUID);
-      for (let i = 0; i < 3; i++) for (const p of INIT_SEQUENCE) { await write(hexToBytes(p)); await sleep(100); }
-      await write(CMD.ledOn());   // eyes open when awake: lit head = "connected to phone" (v6)
+      device.addEventListener("gattserverdisconnected", onGattDrop);
+      await establish();
     },
     async do(word) {
       if (!(word in ACTIONS)) throw new Error("unknown action: " + word);
       return ACTIONS[word]();
     },
-    async stopAll() { if (writeChar) { await writeStopBurst(); await write(CMD.rotateStop()); } },
+    async stopAll() { interrupt(); if (writeChar) { await writeStopBurst(); await write(CMD.rotateStop()); } },
+    interrupt,                       // v9: cut an in-flight action (idle fidget) short
+    get reconnecting() { return reconnecting; },
     // -- D-pad drive: brain calls driveDir(dir) repeatedly while a button is held; body owns
     //    the per-motor mapping, rate limit, and DEADMAN reflex (no update for 500 ms → auto-stop).
     //    forward/left/right use confirmed forward bytes; back uses the UNCONFIRMED reverse candidate. --
@@ -227,8 +337,10 @@ const body = (() => {
       if (writeChar) writeStopBurst();   // redundant stop burst (v8 flaky-stop fix)
     },
     onDrop(cb) { dropCb = cb; },
+    onReconnect(cb) { reconnectCb = cb; },   // v9: cb({phase:"trying"|"ok"|"fail"|"giveup", ...})
     armAckStamp() { _firstAckAt = null; },
     get firstAckAt() { return _firstAckAt; },
+    get lastAck() { return _lastAck; },   // v10: for dashboard
   };
 })();
 
@@ -284,6 +396,7 @@ function logEvent(action, commandHex, ackMs, reacted, notes) {
   rows.push({ timestamp: new Date().toISOString().slice(0, 19), script: SCRIPT_NAME, action,
               command_hex: commandHex, ack_ms: ackMs != null ? ackMs.toFixed(1) : "", reacted, notes });
   save(); renderLog();
+  dash.update();
 }
 function renderLog() {
   const tb = document.getElementById("logBody"); tb.innerHTML = "";
@@ -294,6 +407,56 @@ function renderLog() {
     tb.appendChild(tr);
   });
 }
+
+/* ---- COMMAND DASHBOARD (v10) ----
+   Read-only view over what the app already knows: body connection state + the
+   session's log rows. NO battery — the droid exposes no telemetry (notify char
+   returns nothing), so battery is shown as "not exposed" rather than faked.
+   session = rows since the last Connect; uptime ticks live off sessionStartMs. */
+const dash = (() => {
+  const $ = id => document.getElementById(id);
+  const num = (n, unit = "") => (n == null || isNaN(n)) ? "—" : `${Math.round(n)}<small>${unit}</small>`;
+  const median = xs => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b), m = s.length >> 1;
+                         return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  let sessionStartIso = null, sessionStartMs = null;
+  $("dVer").textContent = VERSION;
+
+  function start() { sessionStartMs = Date.now(); sessionStartIso = new Date().toISOString().slice(0, 19); update(); }
+  function uptime() {
+    if (!sessionStartMs) return "—";
+    const s = Math.floor((Date.now() - sessionStartMs) / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+  function update() {
+    const connected = body.connected, reconnecting = body.reconnecting;
+    const dot = $("dDot"), conn = $("dConn");
+    dot.className = connected ? "ok" : (reconnecting ? "warn" : "err");
+    conn.textContent = connected ? "BB-8 connected" : (reconnecting ? "Reconnecting…" : "Not connected");
+
+    const sess = sessionStartIso ? rows.filter(r => r.timestamp >= sessionStartIso) : [];
+    const isCmd = a => a === "Voice reaction" || a === "Dpad drive" || a === "Idle fidget";
+    const voice = sess.filter(r => r.action === "Voice reaction" && r.reacted === "y");
+    const lat = voice.map(r => parseFloat(r.ack_ms)).filter(n => !isNaN(n));
+    const reconnects = sess.filter(r => r.action === "Reconnect" && r.command_hex === "ok").length;
+
+    $("dUptime").innerHTML  = uptime();
+    $("dCmds").textContent  = sess.filter(r => isCmd(r.action)).length;
+    $("dLastMs").innerHTML  = lat.length ? num(lat[lat.length - 1], " ms") : "—";
+    $("dAck").innerHTML     = num(body.lastAck, " ms");
+    $("dRe").textContent    = reconnects;
+    $("dMed").innerHTML     = num(median(lat), " ms");
+    $("dIdle").textContent  = idle.running ? "on" : "off";
+
+    const last = voice[voice.length - 1];
+    if (last) {
+      const heard = (last.notes.match(/heard="([^"]*)"/) || [, ""])[1];
+      const mood  = (last.notes.match(/mood="([^"]*)"/) || [, ""])[1];
+      $("dLast").innerHTML = `<b>${last.action.replace("Voice reaction", "").trim() || "reacted"}</b> · “${heard}”${mood ? ` <i>(${mood})</i>` : ""}`;
+    }
+  }
+  setInterval(() => { if (sessionStartMs) $("dUptime").innerHTML = uptime(); }, 1000);
+  return { start, update };
+})();
 const csvEsc = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 document.getElementById("export").onclick = () => {
   const fields = ["timestamp","script","action","command_hex","ack_ms","reacted","notes"];
@@ -381,6 +544,7 @@ function startHold(dir, btn, e) {
   if (!body.connected || holdDir !== null) return;
   e.preventDefault();
   holdDir = dir; dpBtn = btn; dpT0 = performance.now(); voiceBusy = true;   // idle yields while driving
+  body.interrupt();                                                        // v9: cut any in-flight idle fidget
   btn.classList.add("active");
   body.driveDir(dir);
   holdTimer = setInterval(() => body.driveDir(holdDir), VEC_MS);   // keep feeding the deadman while held
@@ -403,10 +567,27 @@ document.getElementById("dpStop").addEventListener("pointerdown", e => { e.preve
 
 const setControls = on => { talkBtn.disabled = !on; idleBtn.disabled = !on; dpad.classList.toggle("off", !on); };
 
+// v9 reconnect UX: remember whether idle was running so we can resume it after a successful reconnect.
+let resumeIdleAfterReconnect = false;
 body.onDrop(() => {
+  resumeIdleAfterReconnect = idle.running;
   idle.stop(); setIdleBtn();
   setControls(false);
-  setStatus("Disconnected.", "err");
+  setStatus("Connection dropped — reconnecting…", "err");
+  logEvent("Disconnect", "drop", null, "n", `body=${body.name} wasIdle=${resumeIdleAfterReconnect}`);
+});
+body.onReconnect(st => {
+  if (st.phase === "trying") {
+    setStatus(`Reconnecting… (try ${st.attempt}/${st.tries})`, "err");
+  } else if (st.phase === "ok") {
+    setControls(true);
+    setStatus("Reconnected. Lights on = back online.", "ok");
+    logEvent("Reconnect", "ok", null, "y", `attempt=${st.attempt} body=${body.name}`);
+    if (resumeIdleAfterReconnect) { idle.start(); setIdleBtn(); resumeIdleAfterReconnect = false; }
+  } else if (st.phase === "giveup") {
+    setStatus("Reconnect failed — tap Connect to retry.", "err");
+    logEvent("Reconnect", "giveup", null, "n", `tries=${st.tries} body=${body.name}`);
+  }
 });
 
 document.getElementById("connect").onclick = async () => {
@@ -414,6 +595,7 @@ document.getElementById("connect").onclick = async () => {
     setStatus("Pick DROID in the chooser…");
     await body.connect();
     setControls(true);
+    dash.start();   // v10: begin a dashboard session (uptime, counters)
     setStatus("Ready. Lights on = connected. Talk, hold-to-drive, or let it idle.", "ok");
   } catch (e) { setStatus("Error: " + e.message, "err"); }
 };
@@ -428,6 +610,7 @@ talkBtn.onclick = () => {
   const rec = new SR();
   rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
   voiceBusy = true;                       // idle yields while we listen/think/react
+  body.interrupt();                       // v9: cut any in-flight idle fidget so the reaction takes over cleanly
   let gotResult = false;
   talkBtn.classList.add("listening"); talkBtn.textContent = "🔴 Listening…";
   trEl.textContent = "";
@@ -464,6 +647,7 @@ talkBtn.onclick = () => {
   rec.start();
 };
 renderLog();
+dash.update();   // v10: paint the dashboard's initial "Not connected" state
 </script>
 </body>
 </html>
