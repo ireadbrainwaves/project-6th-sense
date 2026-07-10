@@ -23,13 +23,18 @@
   #stopAll { width: 100%; border-color: rgba(220,60,60,.6); margin-bottom: 8px; }
   #idleBtn { width: 100%; margin-bottom: 8px; }
   #idleBtn.on { background: rgba(30,160,90,.25); border-color: rgba(30,160,90,.8); font-weight: 600; }
-  #pad { position: relative; width: 210px; height: 210px; margin: 8px auto 2px; border-radius: 50%;
-         border: 2px solid rgba(128,128,128,.5); background: rgba(128,128,128,.08); touch-action: none; user-select: none; }
-  #pad.off { opacity: .35; }
-  #stick { position: absolute; width: 64px; height: 64px; border-radius: 50%; left: 73px; top: 73px;
-           background: rgba(30,160,90,.45); border: 2px solid rgba(30,160,90,.9); pointer-events: none; }
-  #padLabel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-              color: gray; font-size: .7rem; letter-spacing: .2em; pointer-events: none; }
+  #dpad { display: grid; grid-template-columns: repeat(3, 66px); grid-template-rows: repeat(3, 66px);
+          gap: 6px; justify-content: center; margin: 8px auto 2px; width: max-content; touch-action: none; user-select: none; }
+  #dpad.off { opacity: .35; pointer-events: none; }
+  .dbtn { font-size: 1.5rem; padding: 0; border-radius: 12px; border: 2px solid rgba(128,128,128,.5);
+          background: rgba(128,128,128,.1); display: flex; align-items: center; justify-content: center; }
+  .dbtn.active { background: rgba(30,160,90,.35); border-color: rgba(30,160,90,.9); }
+  #dpUp   { grid-column: 2; grid-row: 1; }
+  #dpLeft { grid-column: 1; grid-row: 2; }
+  #dpStop { grid-column: 2; grid-row: 2; font-size: 1rem; color: rgba(220,60,60,.9); border-color: rgba(220,60,60,.5); }
+  #dpRight{ grid-column: 3; grid-row: 2; }
+  #dpDown { grid-column: 2; grid-row: 3; flex-direction: column; border-style: dashed; border-color: rgba(200,140,40,.7); }
+  #dpDown .exp { font-size: .5rem; letter-spacing: .1em; color: rgba(200,140,40,.95); }
   #transcript { font-size: 1.05rem; min-height: 1.4em; margin: 6px 0; font-style: italic; }
   table { width: 100%; border-collapse: collapse; font-size: .75rem; margin-top: 6px; }
   th, td { border-bottom: 1px solid rgba(128,128,128,.3); padding: 4px 5px; text-align: left; }
@@ -55,8 +60,14 @@
 <button id="talk" disabled>🎤 Talk to BB-8</button>
 <button id="stopAll">STOP all motors</button>
 <button id="idleBtn" disabled>😴 Idle mode: OFF</button>
-<div id="pad"><div id="stick"></div><div id="padLabel">DRIVE</div></div>
-<div class="hint" style="margin:0 0 8px;text-align:center">Drag to drive: up = forward, sideways = turn/pivot. Release (or lose grip) = instant stop. Reverse not yet decoded — below center stops.</div>
+<div id="dpad">
+  <button class="dbtn" id="dpUp"    data-dir="forward">▲</button>
+  <button class="dbtn" id="dpLeft"  data-dir="left">◀</button>
+  <button class="dbtn" id="dpStop">■</button>
+  <button class="dbtn" id="dpRight" data-dir="right">▶</button>
+  <button class="dbtn" id="dpDown"  data-dir="back">▼<span class="exp">test</span></button>
+</div>
+<div class="hint" style="margin:0 0 8px;text-align:center">Hold to drive: ▲ forward, ◀ ▶ pivot (confirmed bytes), ■ = redundant STOP burst. Release (or lose grip) = auto-stop. ▼ reverse fires an <b>unconfirmed candidate byte</b> — logged as <code>dir=back</code> for on-unit decoding.</div>
 <div id="transcript"></div>
 
 <div class="logbar">
@@ -72,7 +83,7 @@
 
 <script>
 "use strict";
-const VERSION = "v7";   // v7: joystick drive pad (differential/arcade mix, forward-only until reverse byte confirmed, deadman auto-stop). Bump on EVERY change.
+const VERSION = "v8";   // v8: joystick pad -> 4-way D-pad (forward/pivots confirmed bytes, reverse=UNCONFIRMED candidate byte flagged for on-unit test); flaky-STOP fix = redundant stop burst on operator stops. Bump on EVERY change.
 const SCRIPT_NAME = "bb8_voice_" + VERSION;
 document.getElementById("ver").textContent = VERSION;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -115,14 +126,19 @@ const body = (() => {
     volume: l => audio(14, intToHex(l)),
     rotate: back => multi(4, (back ? "ff" : "00") + intToHex(120) + intToHex(300) + "0000"),
     rotateStop: () => multi(4, "0000" + intToHex(300) + "0000"),   // zero-speed rotate = stop head (v6 fix — on-unit test pending)
-    drive:  (m, spd) => buildCommand(5, "0" + m + intToHex(spd) + intToHex(300) + "0000"),
+    // driveM: motor m at speed spd. reverse=true sets the direction nibble (REVERSE_NIBBLE) in the
+    // high nibble of <dir><motor>. Forward (reverse=false) = confirmed byte. Reverse = UNCONFIRMED (v8).
+    driveM: (m, spd, reverse) => buildCommand(5, (reverse ? REVERSE_NIBBLE : "0") + m + intToHex(spd) + intToHex(300) + "0000"),
+    drive:  (m, spd) => CMD.driveM(m, spd, false),   // confirmed forward drive (vocabulary actions use this)
     stop:   m => buildCommand(5, "0" + m + "00" + intToHex(300) + "0000"),
   };
   const INIT_SEQUENCE = ["222001", "27420f4444001f00", "27420f4444001802"];
 
   // -- reflex config: timing/speed are the body's business, not the brain's --
   const DRIVE_MS = 700, SPIN_MS = 600, LOOK_MS = 600, SPEED = 80;
-  const DEADMAN_MS = 500, VEC_MS = 120, TURN_SIGN = 1;   // joystick reflex config
+  const DEADMAN_MS = 500, VEC_MS = 120;                   // D-pad drive reflex config
+  const REVERSE_NIBBLE = "1";                             // v8: UNCONFIRMED reverse-drive direction nibble. On-unit: if ▼ doesn't reverse, try "8" then "2".
+  const STOP_REPEATS = 3, STOP_GAP_MS = 50;              // v8: flaky-STOP fix — send operator stops as a redundant burst
   let lastVecAt = 0, vecInFlight = false;
 
   let writeChar = null, dropCb = null, _firstAckAt = null, manualTimer = null;
@@ -134,6 +150,16 @@ const body = (() => {
     else await writeChar.writeValue(pkt);
     if (_firstAckAt === null) _firstAckAt = performance.now();
     return performance.now() - t0;
+  }
+
+  // v8 flaky-STOP fix: a single stop write sometimes didn't land (field report, Phase 0 rows 13-14).
+  // Operator-facing stops send the stop 2-3x per motor, spaced ~50 ms, so one dropped packet can't leave motors running.
+  async function writeStopBurst() {
+    for (let i = 0; i < STOP_REPEATS; i++) {
+      if (!writeChar) return;
+      try { await write(CMD.stop(0)); await write(CMD.stop(1)); } catch (e) {}
+      if (i < STOP_REPEATS - 1) await sleep(STOP_GAP_MS);
+    }
   }
 
   // Every action is a self-terminating "muscle twitch": it resolves only
@@ -173,28 +199,32 @@ const body = (() => {
       if (!(word in ACTIONS)) throw new Error("unknown action: " + word);
       return ACTIONS[word]();
     },
-    async stopAll() { if (writeChar) { await write(CMD.stop(0)); await write(CMD.stop(1)); await write(CMD.rotateStop()); } },
-    // -- joystick drive: brain streams (throttle, turn) in [0..1]/[-1..1]; body owns
-    //    the mix, rate limit, and DEADMAN reflex (no update for 500 ms → auto-stop) --
-    driveVector(throttle, turn) {
+    async stopAll() { if (writeChar) { await writeStopBurst(); await write(CMD.rotateStop()); } },
+    // -- D-pad drive: brain calls driveDir(dir) repeatedly while a button is held; body owns
+    //    the per-motor mapping, rate limit, and DEADMAN reflex (no update for 500 ms → auto-stop).
+    //    forward/left/right use confirmed forward bytes; back uses the UNCONFIRMED reverse candidate. --
+    driveDir(dir) {
       if (!writeChar) return;
       clearTimeout(manualTimer);
       manualTimer = setTimeout(() => this.driveRelease(), DEADMAN_MS);
       const now = performance.now();
       if (vecInFlight || now - lastVecAt < VEC_MS) return;   // don't flood the BLE queue
       lastVecAt = now;
-      // arcade mix → per-motor speeds (motor 0 = "left" assumed; flip TURN_SIGN if it steers backwards)
-      const clamp = v => Math.max(0, Math.min(1, v));
-      const l = clamp(throttle + TURN_SIGN * turn), r = clamp(throttle - TURN_SIGN * turn);
+      // map D-pad direction → per-motor speed + reverse flag. Pivots drive one motor (in-place turn).
+      let l = 0, r = 0, reverse = false;
+      if (dir === "forward")     { l = SPEED; r = SPEED; }
+      else if (dir === "back")   { l = SPEED; r = SPEED; reverse = true; }   // UNCONFIRMED candidate byte
+      else if (dir === "left")   { l = SPEED; r = 0; }
+      else if (dir === "right")  { l = 0; r = SPEED; }
       vecInFlight = true;
       (async () => {
-        try { await write(CMD.drive(0, Math.round(l * SPEED))); await write(CMD.drive(1, Math.round(r * SPEED))); }
+        try { await write(CMD.driveM(0, l, reverse)); await write(CMD.driveM(1, r, reverse)); }
         catch (e) {} finally { vecInFlight = false; }
       })();
     },
     driveRelease() {
       clearTimeout(manualTimer); manualTimer = null; lastVecAt = 0;
-      if (writeChar) { write(CMD.stop(0)); write(CMD.stop(1)); }
+      if (writeChar) writeStopBurst();   // redundant stop burst (v8 flaky-stop fix)
     },
     onDrop(cb) { dropCb = cb; },
     armAckStamp() { _firstAckAt = null; },
@@ -342,38 +372,36 @@ function setIdleBtn() {
 }
 idleBtn.onclick = () => { idle.running ? idle.stop() : idle.start(); setIdleBtn(); };
 
-// -- joystick pad: drag = drive vector, release = stop; body owns mix + deadman --
-const pad = document.getElementById("pad"), stick = document.getElementById("stick");
-pad.classList.add("off");
-let padActive = false, padT0 = null;
-const R = 105, STICK_R = 34;   // pad radius, stick half-size (px)
-function stickTo(dx, dy) { stick.style.left = (R - STICK_R + dx) + "px"; stick.style.top = (R - STICK_R + dy) + "px"; }
-function padVector(e) {
-  const rect = pad.getBoundingClientRect();
-  let dx = e.clientX - rect.left - R, dy = e.clientY - rect.top - R;
-  const d = Math.hypot(dx, dy), max = R - STICK_R;
-  if (d > max) { dx *= max / d; dy *= max / d; }
-  stickTo(dx, dy);
-  return { throttle: Math.max(0, -dy / max), turn: dx / max };   // up = forward; below center = 0 throttle
+// -- D-pad: hold a direction to drive; body owns per-motor mapping + deadman auto-stop.
+//    Center ■ = redundant STOP burst. Only one direction is held at a time. --
+const dpad = document.getElementById("dpad");
+dpad.classList.add("off");
+let holdDir = null, holdTimer = null, dpT0 = null, dpBtn = null;
+function startHold(dir, btn, e) {
+  if (!body.connected || holdDir !== null) return;
+  e.preventDefault();
+  holdDir = dir; dpBtn = btn; dpT0 = performance.now(); voiceBusy = true;   // idle yields while driving
+  btn.classList.add("active");
+  body.driveDir(dir);
+  holdTimer = setInterval(() => body.driveDir(holdDir), VEC_MS);   // keep feeding the deadman while held
 }
-pad.addEventListener("pointerdown", e => {
-  if (!body.connected) return;
-  e.preventDefault(); pad.setPointerCapture(e.pointerId);
-  padActive = true; padT0 = performance.now(); voiceBusy = true;
-  const v = padVector(e); body.driveVector(v.throttle, v.turn);
-});
-pad.addEventListener("pointermove", e => {
-  if (!padActive) return;
-  const v = padVector(e); body.driveVector(v.throttle, v.turn);
-});
-for (const ev of ["pointerup", "pointercancel"]) pad.addEventListener(ev, () => {
-  if (!padActive) return;
-  padActive = false; voiceBusy = false; stickTo(0, 0);
+function endHold() {
+  if (holdDir === null) return;
+  clearInterval(holdTimer); holdTimer = null;
+  const dir = holdDir, t0 = dpT0; holdDir = null;
+  if (dpBtn) { dpBtn.classList.remove("active"); dpBtn = null; }
+  voiceBusy = false;
   body.driveRelease();
-  logEvent("Joystick drive", "pad", performance.now() - padT0, "y", `held=${(performance.now() - padT0).toFixed(0)}ms body=${body.name}`);
+  logEvent("Dpad drive", dir, performance.now() - t0, "y", `dir=${dir} held=${(performance.now() - t0).toFixed(0)}ms body=${body.name}`);
+}
+dpad.querySelectorAll(".dbtn[data-dir]").forEach(btn => {
+  const dir = btn.dataset.dir;
+  btn.addEventListener("pointerdown", e => { btn.setPointerCapture(e.pointerId); startHold(dir, btn, e); });
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) btn.addEventListener(ev, endHold);
 });
+document.getElementById("dpStop").addEventListener("pointerdown", e => { e.preventDefault(); body.stopAll(); });
 
-const setControls = on => { talkBtn.disabled = !on; idleBtn.disabled = !on; pad.classList.toggle("off", !on); };
+const setControls = on => { talkBtn.disabled = !on; idleBtn.disabled = !on; dpad.classList.toggle("off", !on); };
 
 body.onDrop(() => {
   idle.stop(); setIdleBtn();

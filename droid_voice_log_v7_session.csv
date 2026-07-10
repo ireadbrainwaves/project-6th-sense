@@ -1,0 +1,70 @@
+timestamp,script,action,command_hex,ack_ms,reacted,notes
+2026-07-09T19:19:26,bb8_voice_v4,Voice reaction,spin+beep+drive,1335.3,y,"heard=""hey just do whatever you want"" mood=""playful"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=1159ms ble=175ms attempt=1 total=1335ms"
+2026-07-09T19:20:49,bb8_voice_v4,Voice reaction,spin+beep+led_on,1198.8,y,"heard=""bb-8 tell Deja I love you"" mood=""affectionate"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=1055ms ble=144ms attempt=1 total=1199ms"
+2026-07-09T19:21:22,bb8_voice_v4,Voice reaction,look_left+drive+beep,906.4,y,"heard=""bb8 go check on Deja"" mood=""excited"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=783ms ble=123ms attempt=1 total=906ms"
+2026-07-09T19:30:01,bb8_voice_v5,Idle mode,on,,y,idle body=bb8_droid_depot
+2026-07-09T19:30:29,bb8_voice_v5,Idle fidget,blink,662.1,y,idle body=bb8_droid_depot
+2026-07-09T19:30:46,bb8_voice_v5,Voice reaction,led_on+beep+look_right,1107.4,y,"heard=""bb8 keep your lights on"" mood=""obedient"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=965ms ble=142ms attempt=1 total=1107ms"
+2026-07-09T19:30:56,bb8_voice_v5,Idle fidget,blink,638.8,y,idle body=bb8_droid_depot
+2026-07-09T19:31:36,bb8_voice_v5,Idle fidget,blink,1138.8,y,idle body=bb8_droid_depot
+2026-07-09T19:32:11,bb8_voice_v5,Voice reaction,spin+beep+look_right,1127.6,y,"heard=""bb8 tell Deja a joke"" mood=""playful"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=1026ms ble=99ms attempt=1 total=1128ms"
+2026-07-09T19:32:28,bb8_voice_v5,Idle fidget,beep,140.6,y,idle body=bb8_droid_depot
+2026-07-09T19:33:37,bb8_voice_v5,Idle fidget,look_right,483.3,y,idle body=bb8_droid_depot
+2026-07-09T19:33:48,bb8_voice_v5,Idle mode,off,,y,idle body=bb8_droid_depot
+2026-07-09T19:42:23,bb8_voice_v7,Joystick drive,pad,6503.8,y,held=6504ms body=bb8_droid_depot
+2026-07-09T19:42:28,bb8_voice_v7,Joystick drive,pad,3935.4,y,held=3935ms body=bb8_droid_depot
+2026-07-09T19:42:29,bb8_voice_v7,Joystick drive,pad,239.4,y,held=239ms body=bb8_droid_depot
+2026-07-09T19:42:43,bb8_voice_v7,Joystick drive,pad,820.2,y,held=820ms body=bb8_droid_depot
+2026-07-09T19:43:12,bb8_voice_v7,Idle mode,on,,y,idle body=bb8_droid_depot
+2026-07-09T19:43:12,bb8_voice_v7,Idle mode,off,,y,idle body=bb8_droid_depot
+2026-07-09T19:43:13,bb8_voice_v7,Idle mode,on,,y,idle body=bb8_droid_depot
+2026-07-09T19:43:25,bb8_voice_v7,Idle mode,off,,y,idle body=bb8_droid_depot
+2026-07-09T22:03:13,bb8_voice_v7,Idle mode,on,,y,idle body=bb8_droid_depot
+2026-07-09T22:03:50,bb8_voice_v7,Voice reaction,beep+spin+led_on,1126.1,y,"heard=""hey baby how are you doing"" mood=""playful"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=1021ms ble=104ms attempt=1 total=1126ms"
+2026-07-09T22:04:02,bb8_voice_v7,Voice reaction,look_left+beep,890.7,y,"heard=""bb8 look to your left"" mood=""obedient"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=733ms ble=158ms attempt=1 total=891ms"
+2026-07-09T22:04:12,bb8_voice_v7,Voice reaction,look_right+beep+spin,886.6,y,"heard=""bb8 looks you right"" mood=""excited"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=741ms ble=145ms attempt=1 total=887ms"
+2026-07-09T22:04:19,bb8_voice_v7,Voice reaction,look_left+look_right+beep,1058.7,y,"heard=""look you're at one more time"" mood=""sassy"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=917ms ble=142ms attempt=1 total=1059ms"
+2026-07-09T22:04:30,bb8_voice_v7,Idle fidget,blink,546.2,y,idle body=bb8_droid_depot
+2026-07-09T22:05:02,bb8_voice_v7,Voice reaction,led_on+led_off+beep,1016.9,y,"heard=""PBA blink"" mood=""playful"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=861ms ble=156ms attempt=1 total=1017ms"
+2026-07-09T22:05:40,bb8_voice_v7,Idle fidget,look_left,859.3,y,idle body=bb8_droid_depot
+2026-07-09T22:07:16,bb8_voice_v7,Idle fidget,look_left,851.0,y,idle body=bb8_droid_depot
+2026-07-09T22:07:49,bb8_voice_v7,Idle fidget,look_left,897.2,y,idle body=bb8_droid_depot
+2026-07-09T22:09:11,bb8_voice_v7,Idle fidget,look_right,940.1,y,idle body=bb8_droid_depot
+2026-07-09T22:09:18,bb8_voice_v7,Joystick drive,pad,190.7,y,held=191ms body=bb8_droid_depot
+2026-07-09T22:09:30,bb8_voice_v7,Voice reaction,led_on+beep+look_right,890.3,y,"heard=""deviate turn on your eyes"" mood=""playful"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=767ms ble=123ms attempt=1 total=890ms"
+2026-07-09T22:09:41,bb8_voice_v7,Voice reaction,led_off+look_left+look_right,988.9,y,"heard=""bb8 turn off your lights don't say anything"" mood=""obedient"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=842ms ble=147ms attempt=1 total=989ms"
+2026-07-09T22:09:49,bb8_voice_v7,Idle fidget,look_right,886.7,y,idle body=bb8_droid_depot
+2026-07-09T22:10:12,bb8_voice_v7,Idle fidget,look_left,965.8,y,idle body=bb8_droid_depot
+2026-07-09T22:10:14,bb8_voice_v7,Idle mode,off,,y,idle body=bb8_droid_depot
+2026-07-09T22:13:52,bb8_voice_v7,Joystick drive,pad,8267.2,y,held=8267ms body=bb8_droid_depot
+2026-07-09T22:15:25,bb8_voice_v7,Idle mode,on,,y,idle body=bb8_droid_depot
+2026-07-09T22:16:23,bb8_voice_v7,Voice reaction,led_on+beep+look_right,1199.2,y,"heard=""say hi"" mood=""cheerful"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=1042ms ble=157ms attempt=1 total=1199ms"
+2026-07-09T22:16:32,bb8_voice_v7,Voice reaction,look_left+led_off+beep,973.6,y,"heard=""say something else do like sad"" mood=""melancholy"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=771ms ble=202ms attempt=1 total=974ms"
+2026-07-09T22:16:45,bb8_voice_v7,Voice reaction,led_on+spin+beep,1060.3,y,"heard=""be having a good day today ready"" mood=""excited"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=925ms ble=135ms attempt=1 total=1060ms"
+2026-07-09T22:16:54,bb8_voice_v7,Joystick drive,pad,485.1,y,held=485ms body=bb8_droid_depot
+2026-07-09T22:17:00,bb8_voice_v7,Idle fidget,blink,643.3,y,idle body=bb8_droid_depot
+2026-07-09T22:19:01,bb8_voice_v7,Idle fidget,look_right,1127.2,y,idle body=bb8_droid_depot
+2026-07-09T22:24:06,bb8_voice_v7,Idle mode,off,,y,idle body=bb8_droid_depot
+2026-07-09T22:29:05,bb8_voice_v7,Idle mode,on,,y,idle body=bb8_droid_depot
+2026-07-09T22:29:29,bb8_voice_v7,Idle fidget,blink,485.5,y,idle body=bb8_droid_depot
+2026-07-09T22:29:31,bb8_voice_v7,Joystick drive,pad,38.0,y,held=38ms body=bb8_droid_depot
+2026-07-09T22:29:32,bb8_voice_v7,Joystick drive,pad,59.2,y,held=59ms body=bb8_droid_depot
+2026-07-09T22:29:47,bb8_voice_v7,Idle fidget,look_left,903.4,y,idle body=bb8_droid_depot
+2026-07-09T22:30:18,bb8_voice_v7,Idle fidget,blink,1331.1,y,idle body=bb8_droid_depot
+2026-07-09T22:36:04,bb8_voice_v7,Idle mode,on,,y,idle body=bb8_droid_depot
+2026-07-09T22:36:33,bb8_voice_v7,Idle mode,on,,y,idle body=bb8_droid_depot
+2026-07-09T22:37:13,bb8_voice_v7,Idle fidget,blink,1116.6,y,idle body=bb8_droid_depot
+2026-07-09T22:37:42,bb8_voice_v7,Idle fidget,look_left,896.9,y,idle body=bb8_droid_depot
+2026-07-09T22:38:03,bb8_voice_v7,Idle fidget,beep,146.9,y,idle body=bb8_droid_depot
+2026-07-09T22:38:48,bb8_voice_v7,Idle fidget,blink,482.4,y,idle body=bb8_droid_depot
+2026-07-09T22:39:13,bb8_voice_v7,Idle fidget,blink,487.3,y,idle body=bb8_droid_depot
+2026-07-09T22:39:41,bb8_voice_v7,Idle fidget,look_right,1152.3,y,idle body=bb8_droid_depot
+2026-07-09T22:40:00,bb8_voice_v7,Idle fidget,look_left,1134.7,y,idle body=bb8_droid_depot
+2026-07-09T22:40:19,bb8_voice_v7,Idle fidget,look_right,1280.3,y,idle body=bb8_droid_depot
+2026-07-09T22:41:37,bb8_voice_v7,Idle fidget,look_left,857.7,y,idle body=bb8_droid_depot
+2026-07-09T22:41:44,bb8_voice_v7,Voice reaction,led_on+beep+look_right,989.7,y,"heard=""bb8 say hey"" mood=""cheerful"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=814ms ble=176ms attempt=1 total=990ms"
+2026-07-09T22:41:53,bb8_voice_v7,Voice reaction,look_left+look_right+beep,891.8,y,"heard=""can you say hi to Jasmine in Sandia"" mood=""cheerful"" model=""gemini-3.1-flash-lite"" body=bb8_droid_depot gemini=744ms ble=147ms attempt=1 total=892ms"
+2026-07-09T22:42:05,bb8_voice_v7,Idle fidget,blink,533.7,y,idle body=bb8_droid_depot
+2026-07-09T22:42:28,bb8_voice_v7,Idle fidget,look_right,1182.5,y,idle body=bb8_droid_depot
+2026-07-09T22:42:53,bb8_voice_v7,Idle fidget,blink,1151.8,y,idle body=bb8_droid_depot
+2026-07-09T22:48:51,bb8_voice_v7,Idle mode,off,,y,idle body=bb8_droid_depot
