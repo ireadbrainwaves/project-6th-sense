@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROJECT · 6TH SENSE — Autonomous Companion Droids</title>
+<meta name="description" content="Autonomous companion droids — a hybrid between pet and helper. Live build status, roadmap, droid telemetry, the reverse-engineered BLE protocol map, and the CO-600 flagship design brief.">
+<meta property="og:title" content="PROJECT · 6TH SENSE">
+<meta property="og:description" content="Autonomous companion droids — hybrid pet + helper. Live build status, real droid telemetry, and the CO-600 airship design brief.">
+<meta name="theme-color" content="#0f1113">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23ff7a1a' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23ffb020'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1113; --bg2:#14171a; --panel:#1a1e22; --panel2:#20252a;
+    --ink:#e9e7e1; --mute:#8a9096; --stencil:#f4f2ec;
+    --amber:#ff7a1a; --amber2:#ffb020; --ok:#35c07d; --blue:#4aa3ff; --red:#ff5d5d;
+    --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.05);
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+    --disp:'Chakra Petch',system-ui,sans-serif;
+    --body:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  ::selection{background:rgba(255,122,26,.35); color:var(--stencil)}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--body);
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(1200px 600px at 80% -10%, rgba(255,122,26,.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 20%, rgba(74,163,255,.05), transparent 55%),
+      radial-gradient(1000px 700px at 50% 120%, rgba(255,176,32,.04), transparent 60%);
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:0 22px}
+  a{color:var(--amber2); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .label{font-family:var(--mono); text-transform:uppercase; letter-spacing:.18em; font-size:.66rem; color:var(--mute)}
+  .loading{color:var(--mute); font-family:var(--mono); font-size:.78rem}
+
+  /* scroll progress */
+  #prog{position:fixed; top:0; left:0; height:2px; width:0; z-index:60;
+    background:linear-gradient(90deg,var(--amber),var(--amber2)); box-shadow:0 0 8px rgba(255,122,26,.7)}
+
+  /* ---------- top bar ---------- */
+  header.top{position:sticky; top:0; z-index:50; backdrop-filter:blur(12px);
+    background:rgba(15,17,19,.84); border-bottom:1px solid var(--line)}
+  .top .wrap{display:flex; align-items:center; gap:14px; height:58px}
+  .brandmark{width:22px;height:22px;border-radius:50%;border:2px solid var(--amber); position:relative;
+    box-shadow:0 0 0 3px rgba(255,122,26,.15), inset 0 0 6px rgba(255,122,26,.5); flex:0 0 auto}
+  .brandmark::after{content:""; position:absolute; inset:5px; border-radius:50%; background:var(--amber2); opacity:.85}
+  .top b{font-family:var(--disp); font-weight:700; letter-spacing:.05em; font-size:.98rem; white-space:nowrap}
+  .top nav{margin-left:auto; display:flex; gap:18px}
+  .top nav a{color:var(--mute); font-family:var(--mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.14em; padding:4px 2px; border-bottom:1px solid transparent}
+  .top nav a:hover{color:var(--ink); text-decoration:none}
+  .top nav a.on{color:var(--amber2); border-bottom-color:var(--amber)}
+  @media(max-width:760px){.top nav{display:none}}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative; padding:72px 0 48px; overflow:hidden; border-bottom:1px solid var(--line)}
+  .quilt{position:absolute; inset:0; z-index:0; opacity:.5;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.020) 0 1px, transparent 1px 34px),
+      repeating-linear-gradient(-45deg, rgba(255,255,255,.020) 0 1px, transparent 1px 34px);
+    mask-image:radial-gradient(120% 90% at 70% 0%, #000 30%, transparent 75%)}
+  .specks{position:absolute; inset:0; z-index:0; pointer-events:none}
+  .specks i{position:absolute; width:2px; height:2px; border-radius:50%; background:rgba(244,242,236,.35); animation:twinkle 4s infinite}
+  @keyframes twinkle{0%,100%{opacity:.15}50%{opacity:.7}}
+  .hero .wrap{position:relative; z-index:1; display:grid; grid-template-columns:1.12fr .88fr; gap:30px; align-items:center}
+  @media(max-width:840px){.hero .wrap{grid-template-columns:1fr}}
+  .kicker{color:var(--amber); font-family:var(--mono); text-transform:uppercase; letter-spacing:.3em; font-size:.72rem; margin-bottom:14px}
+  h1{font-family:var(--disp); font-weight:700; font-size:clamp(2.2rem,5.8vw,3.7rem); line-height:1.02; margin:0 0 16px; letter-spacing:.01em}
+  h1 .thin{color:var(--mute); font-weight:400}
+  h1 .glow{background:linear-gradient(90deg,var(--stencil),var(--amber2)); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .lede{font-size:1.07rem; color:#cfcdc7; max-width:46ch; margin:0 0 24px}
+  .cta{display:flex; gap:12px; flex-wrap:wrap}
+  .btn{font-family:var(--mono); text-transform:uppercase; letter-spacing:.14em; font-size:.74rem; padding:12px 17px;
+    border:1px solid var(--line); border-radius:8px; color:var(--ink); background:var(--panel); transition:.18s}
+  .btn:hover{border-color:var(--amber); text-decoration:none; transform:translateY(-2px); box-shadow:0 8px 22px rgba(255,122,26,.12)}
+  .btn.solid{background:var(--amber); color:#1a1204; border-color:var(--amber); font-weight:600}
+  .btn.solid:hover{background:var(--amber2); border-color:var(--amber2)}
+  .livechip{display:inline-flex; align-items:center; gap:9px; margin-bottom:24px;
+    border:1px solid var(--line); background:rgba(26,30,34,.85); border-radius:999px; padding:6px 14px 6px 11px; font-family:var(--mono); font-size:.72rem}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(53,192,125,.6);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(53,192,125,.5)}70%{box-shadow:0 0 0 7px rgba(53,192,125,0)}100%{box-shadow:0 0 0 0 rgba(53,192,125,0)}}
+  .livechip b{color:var(--amber2); font-weight:600}
+  .heroticks{display:flex; gap:22px; margin-top:28px; flex-wrap:wrap}
+  .heroticks div{font-family:var(--mono); font-size:.68rem; color:var(--mute); text-transform:uppercase; letter-spacing:.14em}
+  .heroticks b{display:block; font-family:var(--disp); font-size:1.25rem; color:var(--stencil); letter-spacing:.02em; margin-bottom:2px}
+  .art{width:100%; max-width:380px; margin:0 auto; display:block; filter:drop-shadow(0 26px 44px rgba(0,0,0,.55)); animation:float 7s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translateY(0) rotate(-.4deg)}50%{transform:translateY(-12px) rotate(.5deg)}}
+
+  /* ---------- section frame ---------- */
+  section{padding:58px 0; border-bottom:1px solid var(--line2); position:relative}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin-bottom:28px}
+  .sechead .no{font-family:var(--mono); color:var(--amber); font-size:.8rem; letter-spacing:.1em}
+  .sechead h2{font-family:var(--disp); font-weight:600; font-size:1.55rem; margin:0; letter-spacing:.01em}
+  .sechead .rule{flex:1; height:1px; background:var(--line)}
+  .ghostno{position:absolute; right:10px; top:24px; font-family:var(--disp); font-weight:700; font-size:7rem; line-height:1; color:rgba(255,255,255,.028); pointer-events:none; user-select:none}
+
+  /* reveal animation */
+  .reveal{opacity:0; transform:translateY(16px); transition:opacity .6s ease, transform .6s ease}
+  .reveal.in{opacity:1; transform:none}
+  @media(prefers-reduced-motion:reduce){
+    .reveal{opacity:1; transform:none; transition:none}
+    .art{animation:none} .dot{animation:none} .specks i{animation:none}
+    html{scroll-behavior:auto}
+  }
+
+  /* ---------- metric cards ---------- */
+  .grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:14px}
+  @media(max-width:840px){.grid4{grid-template-columns:repeat(2,1fr)}}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:17px 16px 15px; position:relative; overflow:hidden; transition:.2s}
+  .card:hover{transform:translateY(-3px); border-color:rgba(255,122,26,.35); box-shadow:0 12px 28px rgba(0,0,0,.35)}
+  .card::before{content:""; position:absolute; left:0; top:0; width:100%; height:2px; background:linear-gradient(90deg,var(--amber),transparent 70%); opacity:.75}
+  .card .k{font-family:var(--mono); font-size:.62rem; text-transform:uppercase; letter-spacing:.16em; color:var(--mute)}
+  .card .v{font-family:var(--disp); font-weight:700; font-size:2rem; line-height:1.1; margin-top:6px; font-variant-numeric:tabular-nums}
+  .card .s{font-size:.74rem; color:var(--mute); margin-top:2px}
+  .card .v.small{font-size:1.18rem}
+
+  /* ---------- roadmap ---------- */
+  .phase{display:grid; grid-template-columns:150px 1fr; gap:20px; padding:19px 8px; border-top:1px solid var(--line2); position:relative; border-radius:10px}
+  .phase:first-child{border-top:none}
+  @media(max-width:640px){.phase{grid-template-columns:1fr; gap:8px}}
+  .phase .side{display:flex; flex-direction:column; gap:8px}
+  .pnum{font-family:var(--disp); font-weight:700; font-size:1.05rem}
+  .badge{align-self:flex-start; font-family:var(--mono); font-size:.6rem; text-transform:uppercase; letter-spacing:.14em; padding:3px 9px; border-radius:999px; border:1px solid}
+  .badge.done{color:var(--ok); border-color:rgba(53,192,125,.4); background:rgba(53,192,125,.08)}
+  .badge.active{color:var(--amber2); border-color:rgba(255,176,32,.45); background:rgba(255,176,32,.1)}
+  .badge.locked{color:var(--mute); border-color:var(--line)}
+  .phase h3{font-family:var(--disp); font-weight:600; font-size:1.08rem; margin:0 0 5px}
+  .phase p{margin:0 0 8px; color:#c7c5bf; font-size:.94rem}
+  .exit{font-family:var(--mono); font-size:.74rem; color:var(--mute); border-left:2px solid var(--line); padding-left:10px}
+  .exit b{color:var(--amber2); font-weight:600; letter-spacing:.06em}
+  .phase.on{background:linear-gradient(90deg, rgba(255,122,26,.06), transparent 60%); box-shadow:inset 2px 0 0 var(--amber)}
+  .wibar{margin-top:10px}
+  .wibar .label{margin-bottom:6px; display:block}
+  .track{height:6px; border-radius:99px; background:rgba(255,255,255,.06); overflow:hidden; max-width:340px}
+  .track i{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--amber),var(--amber2)); width:0; transition:width 1.1s cubic-bezier(.2,.7,.2,1)}
+
+  /* ---------- telemetry ---------- */
+  .chartbox{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; position:relative}
+  .chartbox h5{margin:0 0 10px; font-family:var(--mono); font-size:.64rem; text-transform:uppercase; letter-spacing:.18em; color:var(--mute); font-weight:500}
+  .tgrid{display:grid; grid-template-columns:1.25fr .75fr; gap:16px; margin-top:16px}
+  .tgrid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px}
+  @media(max-width:840px){.tgrid,.tgrid2{grid-template-columns:1fr}}
+  .moodwrap{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+  .mood{font-family:var(--mono); font-size:.7rem; padding:5px 11px; border-radius:999px; border:1px solid rgba(255,176,32,.3); background:rgba(255,176,32,.06); color:#e8d9b8}
+  .mood b{color:var(--amber2); font-weight:600}
+
+  /* ---------- seam diagram ---------- */
+  .seambox{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px 14px 8px}
+  .seamsvg{width:100%; height:auto; display:block}
+  .seamnotes{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:14px}
+  @media(max-width:700px){.seamnotes{grid-template-columns:1fr}}
+  .seamnotes p{font-size:.88rem; color:#c7c5bf; margin:0; border-left:2px solid var(--line); padding-left:12px}
+  .seamnotes b{color:var(--stencil); font-family:var(--disp)}
+  @keyframes dashmove{to{stroke-dashoffset:-24}}
+  .flowline{stroke-dasharray:6 6; animation:dashmove 1.6s linear infinite}
+  @media(prefers-reduced-motion:reduce){.flowline{animation:none}}
+
+  /* ---------- protocol map ---------- */
+  .proto{width:100%; border-collapse:collapse; font-size:.82rem}
+  .proto th{font-family:var(--mono); font-size:.6rem; text-transform:uppercase; letter-spacing:.16em; color:var(--mute); text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); font-weight:500}
+  .proto td{padding:9px 10px; border-bottom:1px solid var(--line2); vertical-align:top}
+  .proto tr:hover td{background:rgba(255,255,255,.02)}
+  .proto .hex{font-family:var(--mono); font-size:.72rem; color:var(--amber2); letter-spacing:.04em; white-space:nowrap}
+  .proto .ms{font-family:var(--mono); color:var(--stencil); white-space:nowrap; text-align:right}
+  .proto .cmd{font-family:var(--disp); font-weight:600; color:var(--stencil); white-space:nowrap}
+  .ver{font-family:var(--mono); font-size:.6rem; padding:2px 8px; border-radius:99px; border:1px solid}
+  .ver.y{color:var(--ok); border-color:rgba(53,192,125,.4)}
+  .ver.n{color:var(--red); border-color:rgba(255,93,93,.4)}
+  .protoscroll{overflow-x:auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:6px 8px}
+  .protofoot{font-family:var(--mono); font-size:.72rem; color:var(--mute); margin-top:14px}
+  .protofoot .hex{color:var(--amber2)}
+
+  /* ---------- heard feed ---------- */
+  .heard{display:flex; flex-direction:column}
+  .run{display:grid; grid-template-columns:auto 1fr auto; gap:14px; padding:12px 8px; border-top:1px solid var(--line2); align-items:center; border-radius:8px}
+  .run:first-child{border-top:none}
+  .run:hover{background:rgba(255,255,255,.02)}
+  @media(max-width:640px){.run{grid-template-columns:1fr; gap:6px}}
+  .run .q{font-size:.95rem; color:var(--stencil)}
+  .run .q::before{content:"“"; color:var(--amber)} .run .q::after{content:"”"; color:var(--amber)}
+  .run .meta{display:flex; gap:8px; flex-wrap:wrap; margin-top:3px}
+  .pill{font-family:var(--mono); font-size:.62rem; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--mute); letter-spacing:.06em}
+  .pill.a{color:var(--blue); border-color:rgba(74,163,255,.3)}
+  .pill.m{color:var(--amber2); border-color:rgba(255,176,32,.3)}
+  .pill.e{color:var(--red); border-color:rgba(255,93,93,.35)}
+  .run .ms{font-family:var(--mono); font-size:.8rem; color:var(--ok); white-space:nowrap; text-align:right}
+  .run.err .ms{color:var(--red)}
+  .run .ph{font-family:var(--mono); font-size:.62rem; color:var(--mute); border:1px solid var(--line); border-radius:6px; padding:3px 7px; white-space:nowrap}
+
+  /* ---------- activity feed ---------- */
+  .commit{display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; padding:12px 4px; border-top:1px solid var(--line2)}
+  .commit:first-child{border-top:none}
+  .commit:hover{background:rgba(255,255,255,.02)}
+  .commit .sha{font-family:var(--mono); font-size:.68rem; color:var(--amber2); background:rgba(255,176,32,.08); border:1px solid var(--line); padding:3px 7px; border-radius:6px}
+  .commit .msg{font-size:.92rem; color:#d6d4ce; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .commit .when{font-family:var(--mono); font-size:.68rem; color:var(--mute); white-space:nowrap}
+  .branchrow{display:flex; gap:8px; flex-wrap:wrap; margin-top:16px}
+  .chip{font-family:var(--mono); font-size:.68rem; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--mute)}
+  .chip.b{color:var(--blue); border-color:rgba(74,163,255,.35); background:rgba(74,163,255,.07)}
+
+  /* ---------- CO-600 brief ---------- */
+  .brief{display:grid; grid-template-columns:1fr 1fr; gap:22px}
+  @media(max-width:840px){.brief{grid-template-columns:1fr}}
+  .panelbox{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px; transition:.2s}
+  .panelbox:hover{border-color:rgba(255,122,26,.3); transform:translateY(-2px)}
+  .panelbox h4{font-family:var(--disp); font-weight:600; font-size:1rem; margin:0 0 10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .panelbox h4 .tag{font-family:var(--mono); font-size:.58rem; color:var(--amber); border:1px solid var(--line); border-radius:5px; padding:2px 6px; letter-spacing:.12em}
+  .panelbox p{margin:0 0 10px; font-size:.92rem; color:#c7c5bf}
+  .spec{width:100%; border-collapse:collapse; font-size:.84rem; margin-top:4px}
+  .spec td{padding:6px 4px; border-bottom:1px solid var(--line2)}
+  .spec td:last-child{text-align:right; font-family:var(--mono); color:var(--stencil)}
+  .spec tr.hi td:last-child{color:var(--amber2); font-weight:600}
+  .big-quote{font-family:var(--disp); font-weight:500; font-size:1.2rem; line-height:1.4; color:var(--ink); border-left:3px solid var(--amber); padding:6px 0 6px 16px; margin:6px 0 0}
+  .tiers{list-style:none; padding:0; margin:6px 0 0; counter-reset:t}
+  .tiers li{counter-increment:t; position:relative; padding:8px 0 8px 34px; border-bottom:1px solid var(--line2); font-size:.9rem; color:#c7c5bf}
+  .tiers li::before{content:counter(t); position:absolute; left:0; top:7px; width:22px; height:22px; border-radius:50%; border:1px solid var(--amber); color:var(--amber); font-family:var(--mono); font-size:.72rem; display:flex; align-items:center; justify-content:center}
+  .tiers li b{color:var(--stencil); font-family:var(--disp)}
+
+  /* ---------- footer ---------- */
+  footer{padding:44px 0 64px}
+  .plate{border:1px solid var(--line); border-radius:12px; background:var(--panel); padding:18px 20px;
+    display:flex; gap:20px; flex-wrap:wrap; align-items:center; justify-content:space-between}
+  .stencilblock{font-family:var(--mono); text-transform:uppercase; letter-spacing:.2em; font-size:.68rem; color:var(--mute); display:flex; gap:18px; flex-wrap:wrap}
+  .stencilblock b{color:var(--stencil); font-weight:500}
+  .barcode{display:flex; gap:2px; align-items:flex-end; height:26px}
+  .barcode i{display:block; width:2px; background:var(--mute); opacity:.7}
+  .disclaimer{font-size:.74rem; color:#5f6469; margin-top:18px; max-width:70ch}
+</style>
+</head>
+<body>
+<div id="prog"></div>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brandmark"></div>
+    <b>PROJECT · 6TH&nbsp;SENSE</b>
+    <nav id="topnav">
+      <a href="#status">Status</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#telemetry">Telemetry</a>
+      <a href="#seam">The Seam</a>
+      <a href="#protocol">Protocol</a>
+      <a href="#heard">Voice Feed</a>
+      <a href="#co600">CO-600</a>
+      <a href="https://github.com/ireadbrainwaves/project-6th-sense" target="_blank" rel="noopener">Repo ↗</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ===================== HERO ===================== -->
+<div class="hero">
+  <div class="quilt"></div>
+  <div class="specks" id="specks"></div>
+  <div class="wrap">
+    <div>
+      <div class="livechip">
+        <span class="dot"></span>
+        <span id="chipText" class="loading">syncing with repo…</span>
+      </div>
+      <div class="kicker">Autonomous Companion Robotics</div>
+      <h1>Droids that live<br><span class="thin">between</span> <span class="glow">pet</span> <span class="thin">&amp;</span> <span class="glow">helper</span>.</h1>
+      <p class="lede">A build log in the open: a droid reverse-engineered down to its bytes, wrapped in a swappable brain/body seam, slowly growing toward a buoyant companion that can genuinely fly — and genuinely die.</p>
+      <div class="cta">
+        <a class="btn solid" href="#co600">See the CO-600 brief</a>
+        <a class="btn" href="#telemetry">Live telemetry</a>
+        <a class="btn" href="#protocol">Protocol map</a>
+      </div>
+      <div class="heroticks">
+        <div><b id="hkRuns">—</b>voice runs logged</div>
+        <div><b id="hkLat">—</b>current median loop</div>
+        <div><b id="hkCmds">—</b>commands decoded</div>
+      </div>
+    </div>
+    <div>
+      <!-- CO-600 blimp, drawn -->
+      <svg class="art" viewBox="0 0 360 300" xmlns="http://www.w3.org/2000/svg" aria-label="CO-600 companion airship">
+        <defs>
+          <radialGradient id="env" cx="42%" cy="34%" r="72%">
+            <stop offset="0%" stop-color="#3a3f44"/>
+            <stop offset="55%" stop-color="#2a2e32"/>
+            <stop offset="100%" stop-color="#191c1f"/>
+          </radialGradient>
+          <linearGradient id="boom" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#2b2f33"/><stop offset="1" stop-color="#15181b"/>
+          </linearGradient>
+        </defs>
+        <circle cx="180" cy="120" r="98" fill="url(#env)" stroke="#4a5055" stroke-width="1.5"/>
+        <g stroke="rgba(255,255,255,.07)" stroke-width="1" fill="none">
+          <path d="M100 78 Q180 60 262 82"/><path d="M92 120 H268"/><path d="M100 162 Q180 182 262 158"/>
+          <path d="M138 30 Q120 120 140 208"/><path d="M180 24 V216"/><path d="M222 30 Q240 120 220 208"/>
+        </g>
+        <ellipse cx="150" cy="88" rx="34" ry="18" fill="rgba(255,255,255,.06)"/>
+        <text x="180" y="126" text-anchor="middle" fill="rgba(244,242,236,.8)" font-family="'IBM Plex Mono',monospace" font-size="9" letter-spacing="2">SER NO. CO-600</text>
+        <text x="180" y="140" text-anchor="middle" fill="rgba(255,122,26,.85)" font-family="'IBM Plex Mono',monospace" font-size="6.5" letter-spacing="3">LIFT GAS · HE</text>
+        <rect x="46" y="150" width="60" height="7" rx="3" fill="url(#boom)"/>
+        <rect x="254" y="150" width="60" height="7" rx="3" fill="url(#boom)"/>
+        <g fill="none" stroke="#565c61" stroke-width="2"><circle cx="44" cy="153" r="17"/><circle cx="316" cy="153" r="17"/></g>
+        <!-- spinning rotor blades -->
+        <g stroke="#767d83" stroke-width="1.6" opacity=".8">
+          <g>
+            <line x1="44" y1="139" x2="44" y2="167"/><line x1="30" y1="153" x2="58" y2="153"/>
+            <animateTransform attributeName="transform" type="rotate" from="0 44 153" to="360 44 153" dur="1.1s" repeatCount="indefinite"/>
+          </g>
+          <g>
+            <line x1="316" y1="139" x2="316" y2="167"/><line x1="302" y1="153" x2="330" y2="153"/>
+            <animateTransform attributeName="transform" type="rotate" from="0 316 153" to="360 316 153" dur="1.3s" repeatCount="indefinite"/>
+          </g>
+        </g>
+        <g fill="#22262a" stroke="#3a4045"><circle cx="44" cy="153" r="7"/><circle cx="316" cy="153" r="7"/></g>
+        <g stroke="#3a4045" stroke-width="1.5"><line x1="150" y1="214" x2="164" y2="238"/><line x1="210" y1="214" x2="196" y2="238"/></g>
+        <rect x="150" y="236" width="60" height="30" rx="8" fill="#1c2023" stroke="#454b50"/>
+        <circle cx="168" cy="251" r="8" fill="#0d0f11" stroke="#565c61"/><circle cx="168" cy="251" r="3.4" fill="#4aa3ff"/>
+        <circle cx="192" cy="251" r="5" fill="#0d0f11" stroke="#565c61"/>
+        <circle cx="180" cy="278" r="9" fill="none" stroke="#ffb020" stroke-width="2.4" opacity=".9"/>
+        <circle cx="180" cy="278" r="9" fill="none" stroke="#ffb020" stroke-width="2.4">
+          <animate attributeName="opacity" values="0;.6;0" dur="2.6s" repeatCount="indefinite"/>
+          <animate attributeName="r" values="9;15;9" dur="2.6s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== LIVE STATUS ===================== -->
+<section id="status">
+  <div class="ghostno">01</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">01</span><h2>Build Status</h2><span class="rule"></span><span class="label">live · github</span></div>
+    <div class="grid4">
+      <div class="card"><div class="k">Current Phase</div><div class="v small" id="mPhase">Phase 2</div><div class="s" id="mPhaseS">Embodiment hardening</div></div>
+      <div class="card"><div class="k">Commits on main</div><div class="v" id="mCommits">—</div><div class="s">total pushed</div></div>
+      <div class="card"><div class="k">Last Push</div><div class="v small" id="mLast">—</div><div class="s" id="mLastAbs">fetching…</div></div>
+      <div class="card"><div class="k">Active Branches</div><div class="v" id="mBranches">—</div><div class="s">incl. feature work</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ROADMAP ===================== -->
+<section id="roadmap">
+  <div class="ghostno">02</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">02</span><h2>Phase Roadmap</h2><span class="rule"></span><span class="label">gated · synced from ROADMAP.md</span></div>
+    <div id="phases"><div class="loading">loading roadmap from repo…</div></div>
+  </div>
+</section>
+
+<!-- ===================== DROID TELEMETRY ===================== -->
+<section id="telemetry">
+  <div class="ghostno">03</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">03</span><h2>Droid Telemetry</h2><span class="rule"></span><span class="label" id="telemSrc">live · voice logs</span></div>
+    <div class="grid4" style="margin-bottom:18px">
+      <div class="card"><div class="k">Voice Runs Logged</div><div class="v" id="tRuns">—</div><div class="s" id="tRunsS">across sessions</div></div>
+      <div class="card"><div class="k">Reaction Success</div><div class="v" id="tSucc">—</div><div class="s" id="tSuccS">parsed clean → acted</div></div>
+      <div class="card"><div class="k">Phase 1 Median</div><div class="v small" id="tP1">—</div><div class="s">MVP loop · utterance→reaction</div></div>
+      <div class="card"><div class="k">Phase 2 Median</div><div class="v small" id="tP2">—</div><div class="s">hardened v3 loop</div></div>
+    </div>
+    <div class="tgrid">
+      <div class="chartbox"><h5>Utterance → reaction, every logged run</h5><canvas id="latChart" height="240"></canvas></div>
+      <div class="chartbox"><h5>Where the time goes · median budget</h5><canvas id="budgetChart" height="240"></canvas>
+        <p style="color:var(--mute); font-size:.76rem; font-family:var(--mono); margin:12px 0 0" id="telemNote">Gemini inference dominates; BLE write-ACK is fast.</p>
+      </div>
+    </div>
+    <div class="tgrid2">
+      <div class="chartbox"><h5>Command mix · what the droid actually did</h5><canvas id="mixChart" height="220"></canvas></div>
+      <div class="chartbox"><h5>Mood telemetry · personality, logged</h5>
+        <div class="moodwrap" id="moods"><span class="loading">parsing moods…</span></div>
+        <p style="color:#c7c5bf; font-size:.88rem; margin:16px 0 0">Every reaction logs the mood Gemini chose for the droid. The distribution is the personality — measured, not imagined. Each point, bar, and chip on this page is re-derived from the CSVs in the repo on every load.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== THE SEAM ===================== -->
+<section id="seam">
+  <div class="ghostno">04</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">04</span><h2>The Brain / Body Seam</h2><span class="rule"></span><span class="label">architecture · v4</span></div>
+    <div class="seambox">
+      <svg class="seamsvg" viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg" aria-label="Brain to body architecture: mic to Gemini to body object to BLE to droid">
+        <defs>
+          <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0 0 L8 4 L0 8 z" fill="#ff7a1a"/>
+          </marker>
+        </defs>
+        <!-- seam divider -->
+        <line x1="560" y1="14" x2="560" y2="212" stroke="#ffb020" stroke-width="1.4" stroke-dasharray="7 6" opacity=".8"/>
+        <text x="560" y="238" text-anchor="middle" fill="#ffb020" font-family="'IBM Plex Mono',monospace" font-size="11" letter-spacing="3">THE SEAM</text>
+        <text x="560" y="254" text-anchor="middle" fill="#8a9096" font-family="'IBM Plex Mono',monospace" font-size="8.5" letter-spacing="1.5">NEW BODY = ONE NEW OBJECT · ZERO BRAIN CHANGES</text>
+        <text x="285" y="30" text-anchor="middle" fill="#8a9096" font-family="'IBM Plex Mono',monospace" font-size="10" letter-spacing="4">BRAIN · SEQUENCES BETWEEN ACTIONS</text>
+        <text x="732" y="30" text-anchor="middle" fill="#8a9096" font-family="'IBM Plex Mono',monospace" font-size="10" letter-spacing="4">BODY · OWNS EXECUTION</text>
+        <!-- brain nodes -->
+        <g font-family="'IBM Plex Mono',monospace">
+          <rect x="24" y="86" width="118" height="66" rx="10" fill="#20252a" stroke="#3a4045"/>
+          <text x="83" y="114" text-anchor="middle" fill="#f4f2ec" font-size="12" font-weight="600">MIC</text>
+          <text x="83" y="132" text-anchor="middle" fill="#8a9096" font-size="8.5">web speech STT</text>
+
+          <rect x="196" y="86" width="128" height="66" rx="10" fill="#20252a" stroke="#4aa3ff" stroke-opacity=".5"/>
+          <text x="260" y="114" text-anchor="middle" fill="#f4f2ec" font-size="12" font-weight="600">GEMINI</text>
+          <text x="260" y="132" text-anchor="middle" fill="#4aa3ff" font-size="8.5">cognition · mood</text>
+
+          <rect x="378" y="86" width="128" height="66" rx="10" fill="#20252a" stroke="#3a4045"/>
+          <text x="442" y="110" text-anchor="middle" fill="#f4f2ec" font-size="11" font-weight="600">ACTION WORDS</text>
+          <text x="442" y="128" text-anchor="middle" fill="#8a9096" font-size="8.5">beep · spin · drive</text>
+          <text x="442" y="140" text-anchor="middle" fill="#8a9096" font-size="8.5">led_on · look_left…</text>
+
+          <!-- body nodes -->
+          <rect x="614" y="76" width="140" height="86" rx="10" fill="#20252a" stroke="#ff7a1a" stroke-opacity=".6"/>
+          <text x="684" y="100" text-anchor="middle" fill="#ffb020" font-size="12" font-weight="600">body OBJECT</text>
+          <text x="684" y="118" text-anchor="middle" fill="#8a9096" font-size="8.5">connect() · do(word)</text>
+          <text x="684" y="130" text-anchor="middle" fill="#8a9096" font-size="8.5">stopAll() · onDrop(cb)</text>
+          <text x="684" y="142" text-anchor="middle" fill="#8a9096" font-size="8.5">actions() · ACK probe</text>
+
+          <rect x="798" y="86" width="84" height="66" rx="10" fill="#20252a" stroke="#3a4045"/>
+          <text x="840" y="112" text-anchor="middle" fill="#f4f2ec" font-size="12" font-weight="600">BB-8</text>
+          <text x="840" y="130" text-anchor="middle" fill="#8a9096" font-size="8.5">BLE frames</text>
+        </g>
+        <!-- flow lines -->
+        <g stroke="#ff7a1a" stroke-width="1.6" fill="none" marker-end="url(#arr)">
+          <line class="flowline" x1="142" y1="119" x2="192" y2="119"/>
+          <line class="flowline" x1="324" y1="119" x2="374" y2="119"/>
+          <line class="flowline" x1="506" y1="119" x2="610" y2="119"/>
+          <line class="flowline" x1="754" y1="119" x2="794" y2="119"/>
+        </g>
+        <!-- latency stamps -->
+        <g font-family="'IBM Plex Mono',monospace" font-size="8.5" fill="#8a9096">
+          <text x="260" y="170" text-anchor="middle" id="svgGem">gemini ≈ — ms</text>
+          <text x="840" y="170" text-anchor="middle" id="svgBle">ACK ≈ — ms</text>
+        </g>
+      </svg>
+    </div>
+    <div class="seamnotes">
+      <p><b>Reflexes are free.</b> Idle fidgets, timers, auto-stop, reconnects — local algorithms, $0, no API call. Cognition (interpreting speech) is the only thing that earns a Gemini round-trip. Audio is an <em>interrupt</em> to an otherwise algorithmic idle loop.</p>
+      <p><b>The Phase 3 test is already written.</b> Everything droid-specific lives in one <code style="font-family:var(--mono); color:var(--amber2)">body</code> object; the system prompt is generated from <code style="font-family:var(--mono); color:var(--amber2)">body.actions()</code>. Swapping BB-8 for custom hardware means one new object — if it takes more, that's an architecture violation by definition.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PROTOCOL MAP ===================== -->
+<section id="protocol">
+  <div class="ghostno">05</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">05</span><h2>Protocol Map</h2><span class="rule"></span><span class="label" id="protoSrc">reverse-engineered · live from bench logs</span></div>
+    <p style="color:#c7c5bf; max-width:72ch; margin:0 0 18px">No SDK, no docs — this command set was pulled off the air with a BLE sniff and confirmed byte-by-byte on the unit. Each row below is parsed live from the bench CSVs: the exact frame written, the measured write→ACK round trip, and whether the droid physically did the thing.</p>
+    <div class="protoscroll">
+      <table class="proto" id="protoTable">
+        <thead><tr><th>Command</th><th>Frame (hex)</th><th style="text-align:right">Med. ACK</th><th>Verified</th><th>Bench note</th></tr></thead>
+        <tbody><tr><td colspan="5" class="loading">parsing bench logs…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="protofoot">Open questions carried into Phase 2: head-LED flash <span class="hex">…45 01</span> gives no reaction · reverse-drive direction bit undecoded · notify payload <span class="hex">2F 32 81 45 4B 10 01 44 44 11 11 01 …</span> unexplained — the framing rule applied in reverse is the lead.</p>
+  </div>
+</section>
+
+<!-- ===================== VOICE FEED ===================== -->
+<section id="heard">
+  <div class="ghostno">06</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">06</span><h2>What The Droid Heard</h2><span class="rule"></span><span class="label">live · latest voice runs</span></div>
+    <p style="color:#c7c5bf; max-width:72ch; margin:0 0 14px">The raw loop, unedited — what speech-to-text thought was said, what the droid did about it, in what mood, and how long the whole thought took. Mishearings ship too: <em>"bb-8 roll Ford"</em> still rolled forward.</p>
+    <div class="heard" id="heardFeed"><div class="loading">loading voice runs…</div></div>
+  </div>
+</section>
+
+<!-- ===================== ACTIVITY ===================== -->
+<section id="activity">
+  <div class="ghostno">07</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">07</span><h2>Recent Activity</h2><span class="rule"></span><span class="label">live commit feed</span></div>
+    <div class="feed" id="feed"><div class="loading">loading commits…</div></div>
+    <div class="branchrow" id="branchrow"></div>
+  </div>
+</section>
+
+<!-- ===================== CO-600 BRIEF ===================== -->
+<section id="co600">
+  <div class="ghostno">08</div>
+  <div class="wrap reveal">
+    <div class="sechead"><span class="no">08</span><h2>CO-600 · The Flagship</h2><span class="rule"></span><span class="label">design brief · engineering</span></div>
+    <p class="big-quote">A pet that isn't biological, gives the emotional weight of one, has real utility — and can genuinely die.</p>
+    <p style="color:#c7c5bf; max-width:66ch; margin:14px 0 26px">The flagship form is a buoyancy-assisted airship: a helium envelope carries the static weight, two tilting rotors only steer and trim. It's the one configuration that is quiet, endures for hours, is soft enough to bump into, and fails gently — a power loss becomes a slow sink, not a fall.</p>
+    <div class="brief">
+      <div class="panelbox">
+        <h4>Lift Budget <span class="tag">60&nbsp;CM SPHERE</span></h4>
+        <p>Lift is a volume game: ~1.0&nbsp;g of lift per liter of air displaced. A 60&nbsp;cm envelope — the width of a 27″ monitor — is near the smallest that flies a real payload.</p>
+        <table class="spec">
+          <tr><td>Displaced volume</td><td>113 L</td></tr>
+          <tr class="hi"><td>Gross lift</td><td>≈ 113 g</td></tr>
+          <tr><td>Envelope + gondola</td><td>64 g</td></tr>
+          <tr class="hi"><td>Spare lift → battery/ballast</td><td>≈ 49 g</td></tr>
+          <tr><td>Target buoyancy fraction</td><td>f ≈ 0.97</td></tr>
+        </table>
+      </div>
+      <div class="panelbox">
+        <h4>Control Architecture <span class="tag">TWO LOOPS</span></h4>
+        <p><b style="color:var(--stencil)">Spinal cord</b> — onboard, 50–100&nbsp;Hz. Attitude, altitude, and optical-flow drift-kill. Never depends on the phone.</p>
+        <p><b style="color:var(--stencil)">Cortex</b> — on the phone, 5–15&nbsp;Hz. Vision, personality, cognition. Returns <em>setpoints only</em> — bearing, range, height. The ship never needs to know what a person <em>is</em>; it chases setpoints.</p>
+        <p style="color:var(--mute); font-size:.84rem; margin-bottom:0">The slow dynamics of a blimp are exactly what make phone-offloaded cognition possible.</p>
+      </div>
+      <div class="panelbox">
+        <h4>Build Tiers <span class="tag">EACH DEMOS ALONE</span></h4>
+        <ul class="tiers">
+          <li><b>Hover + hold</b> — onboard only, no phone.</li>
+          <li><b>Follow the beacon</b> — UWB/BLE pursuit. Still no vision.</li>
+          <li><b>See you</b> — camera → phone → detect → orient. The "it looks at you" moment.</li>
+          <li><b>Understand you</b> — perception feeds the personality brain.</li>
+        </ul>
+      </div>
+      <div class="panelbox">
+        <h4>Visual Direction <span class="tag">OSPREY, NOT GUNSHIP</span></h4>
+        <p>Soft body, hard hardware. A quilted charcoal envelope that catches light like a bomber-jacket panel; thick tapered carbon booms into machined collars; a dense gimballed sensor head slung below with a soft amber status ring.</p>
+        <p style="margin-bottom:0; font-family:var(--mono); font-size:.78rem; color:var(--mute)">Reconnaissance aircraft meets Teenage Engineering. A creature in gear — not a machine of war.</p>
+      </div>
+    </div>
+    <p style="color:var(--mute); font-size:.82rem; margin-top:22px">Grounded in three research platforms that bracket the design: ETH Zurich's nano-blimp (hovering on &lt;200&nbsp;mW), Georgia Tech's GT-MAB (&gt;2&nbsp;h endurance), and TU Delft's BEAVIS (55&nbsp;cm, reliable indoors).</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="plate">
+      <div class="stencilblock">
+        <span>SER NO. <b>CO-600</b></span><span>COMPANION UNIT <b>01</b></span>
+        <span>LIFT GAS <b>HE</b></span><span>STATUS <b id="footStatus">ACTIVE</b></span>
+        <span>SRC <b><a href="https://github.com/ireadbrainwaves/project-6th-sense" target="_blank" rel="noopener">github/project-6th-sense</a></b></span>
+      </div>
+      <div class="barcode" id="barcode" aria-hidden="true"></div>
+    </div>
+    <p class="disclaimer">Live figures pulled from the public GitHub repository on load. Roadmap synced from <code>ROADMAP.md</code>; telemetry, protocol map, and voice feed parsed from the droid logs in the repo. Built as the project's public build-log — a work in progress, rolling out slowly.</p>
+  </div>
+</footer>
+
+<script>
+"use strict";
+const OWNER="ireadbrainwaves", REPO="project-6th-sense", BRANCH="main";
+const API=`https://api.github.com/repos/${OWNER}/${REPO}`;
+const RAW=`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}`;
+const $=id=>document.getElementById(id);
+const MONO="'IBM Plex Mono'";
+const CLR={amber:"#ff7a1a",amber2:"#ffb020",ok:"#35c07d",blue:"#4aa3ff",red:"#ff5d5d",mute:"#8a9096",ink:"#c7c5bf",grid:"rgba(255,255,255,.06)"};
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function ago(d){
+  const s=(Date.now()-new Date(d).getTime())/1000;
+  if(s<60)return"just now"; if(s<3600)return Math.floor(s/60)+"m ago";
+  if(s<86400)return Math.floor(s/3600)+"h ago";
+  const days=Math.floor(s/86400); if(days<30)return days+"d ago";
+  return new Date(d).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+}
+function countUp(el,target,fmt){
+  fmt=fmt||(v=>String(v));
+  if(reduceMotion||!isFinite(target)){el.textContent=fmt(target);return;}
+  const t0=performance.now(),dur=900;
+  (function tick(t){
+    const p=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-p,3);
+    el.textContent=fmt(Math.round(target*e));
+    if(p<1)requestAnimationFrame(tick);
+  })(t0);
+}
+const median=a=>{ if(!a.length)return null; const s=[...a].sort((x,y)=>x-y),m=s.length>>1;
+  return s.length%2?Math.round(s[m]):Math.round((s[m-1]+s[m])/2); };
+
+/* ---------- chrome: specks, barcode, progress, scrollspy, reveal ---------- */
+(function chrome(){
+  const sp=$("specks");
+  if(sp){ let h=""; for(let i=0;i<26;i++){ h+=`<i style="left:${(Math.random()*100).toFixed(1)}%;top:${(Math.random()*100).toFixed(1)}%;animation-delay:${(Math.random()*4).toFixed(2)}s"></i>`; } sp.innerHTML=h; }
+  const bc=$("barcode");
+  if(bc){ let h=""; for(let i=0;i<28;i++){ h+=`<i style="height:${8+Math.floor(Math.random()*18)}px"></i>`; } bc.innerHTML=h; }
+  const prog=$("prog");
+  addEventListener("scroll",()=>{
+    const max=document.documentElement.scrollHeight-innerHeight;
+    prog.style.width=(max>0?(scrollY/max)*100:0)+"%";
+  },{passive:true});
+  const links=[...document.querySelectorAll("#topnav a[href^='#']")];
+  const byId={}; links.forEach(a=>byId[a.getAttribute("href").slice(1)]=a);
+  const spy=new IntersectionObserver(es=>{
+    es.forEach(e=>{ if(e.isIntersecting){ links.forEach(a=>a.classList.remove("on")); const a=byId[e.target.id]; if(a)a.classList.add("on"); }});
+  },{rootMargin:"-35% 0px -55% 0px"});
+  document.querySelectorAll("section[id]").forEach(s=>spy.observe(s));
+  const rev=new IntersectionObserver(es=>{
+    es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add("in"); rev.unobserve(e.target); }});
+  },{threshold:.08});
+  document.querySelectorAll(".reveal").forEach(el=>rev.observe(el));
+})();
+
+/* ---------- live: repo, commit count, branches ---------- */
+async function loadRepo(){
+  try{
+    const r=await fetch(API); if(!r.ok)throw 0; const j=await r.json();
+    $("mLast").textContent=ago(j.pushed_at);
+    $("mLastAbs").textContent=new Date(j.pushed_at).toLocaleString(undefined,{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+    $("chipText").innerHTML=`repo live · last push <b>${ago(j.pushed_at)}</b>`;
+    $("chipText").classList.remove("loading");
+  }catch(e){ $("chipText").innerHTML='public build log · <b>6th sense</b>'; $("chipText").classList.remove("loading"); $("mLast").textContent="—"; $("mLastAbs").textContent="offline"; }
+  try{
+    const r=await fetch(`${API}/commits?per_page=1`);
+    const link=r.headers.get("Link")||"";
+    const m=link.match(/[?&]page=(\d+)>;\s*rel="last"/);
+    if(m)countUp($("mCommits"),+m[1]); else $("mCommits").textContent="12";
+  }catch(e){ $("mCommits").textContent="12"; }
+  try{
+    const r=await fetch(`${API}/branches?per_page=100`); const b=await r.json();
+    if(Array.isArray(b)){
+      countUp($("mBranches"),b.length);
+      const feats=b.map(x=>x.name).filter(n=>n!=="main");
+      $("branchrow").innerHTML='<span class="chip">main</span>'+feats.map(n=>`<span class="chip b">${esc(n)}</span>`).join("");
+    }
+  }catch(e){ $("mBranches").textContent="—"; }
+}
+
+/* ---------- live: commit feed ---------- */
+async function loadFeed(){
+  const el=$("feed");
+  try{
+    const r=await fetch(`${API}/commits?per_page=8`); if(!r.ok)throw 0; const cs=await r.json();
+    el.innerHTML=cs.map(c=>{
+      const msg=esc(c.commit.message.split("\n")[0]);
+      const sha=c.sha.slice(0,7);
+      const when=ago(c.commit.author.date);
+      return `<div class="commit"><a class="sha" href="${c.html_url}" target="_blank" rel="noopener">${sha}</a><div class="msg">${msg}</div><div class="when">${when}</div></div>`;
+    }).join("");
+  }catch(e){
+    el.innerHTML='<div class="loading">Commit feed unavailable right now (GitHub rate limit). It refreshes on reload.</div>';
+  }
+}
+
+/* ---------- live: roadmap from ROADMAP.md ---------- */
+const FALLBACK=[
+  {n:"Phase 0",t:"Protocol Confirmation",st:"COMPLETE",d:"Reverse-engineered the droid's BLE command set — drive, heading, head rotation, LED, sound — with confirmed round-trip latency."},
+  {n:"Phase 1",t:"MVP Software Loop",st:"COMPLETE",d:"Phone-only loop: mic → Gemini → BLE command. Droid reacts physically and audibly to a spoken prompt, end to end.",exit:"repeatable spoken → reaction demo, latency logged every run"},
+  {n:"Phase 2",t:"Embodiment Hardening",st:"ACTIVE",d:"BLE control as a swappable body interface: v3 loop validated on-unit, body driver seam shipped (v4). Next: idle state machine, reconnect/error handling.",exit:"30-min unattended session, no crash or BLE desync — proven by the CSV"},
+  {n:"Phase 3",t:"Custom Embedded Body",st:"NOT STARTED",d:"First purchased hardware. MCU selection, mic/camera pipeline, power budget. Replaces or runs alongside the droid. Follow mode is parked here — it needs real position sensing.",exit:"custom unit matches or beats Phase 2 latency/stability baseline"},
+  {n:"Phase 4",t:"Flagship Platform (Blimp)",st:"NOT STARTED",d:"The CO-600 airship. Lift/buoyancy budget, motor power vs. battery, onboard vs. tethered compute. Not spec'd before Phase 3 is stable."}
+];
+function badgeClass(st){ st=(st||"").toUpperCase(); if(st.includes("COMPLETE"))return"done"; if(st.includes("ACTIVE"))return"active"; return"locked"; }
+function badgeText(st){ const c=badgeClass(st); return c==="done"?"✓ Complete":c==="active"?"● Active":"Locked"; }
+function renderPhases(list){
+  $("phases").innerHTML=list.map(p=>{
+    const bc=badgeClass(p.st);
+    const wi=(p.wi&&p.wi.total)?`
+      <div class="wibar"><span class="label">work items · ${p.wi.done}/${p.wi.total} done</span>
+      <div class="track"><i data-w="${Math.round(100*p.wi.done/p.wi.total)}"></i></div></div>`:"";
+    return `<div class="phase ${bc==='active'?'on':''}">
+      <div class="side"><span class="pnum">${esc(p.n)}</span><span class="badge ${bc}">${badgeText(p.st)}</span></div>
+      <div><h3>${esc(p.t)}</h3><p>${p.d}</p>${p.exit?`<div class="exit"><b>EXIT ·</b> ${esc(p.exit)}</div>`:""}${wi}</div></div>`;
+  }).join("");
+  requestAnimationFrame(()=>{ document.querySelectorAll(".track i").forEach(i=>{ i.style.width=i.dataset.w+"%"; }); });
+  const active=list.find(p=>badgeClass(p.st)==="active");
+  if(active){ $("mPhase").textContent=active.n; $("mPhaseS").textContent=active.t; $("footStatus").textContent=active.n.toUpperCase()+" ACTIVE"; }
+}
+async function loadRoadmap(){
+  try{
+    const r=await fetch(`${RAW}/ROADMAP.md`); if(!r.ok)throw 0; const md=await r.text();
+    const re=/^##\s+Phase\s+(\d+)\s+[—-]\s+(.+)$/gm; const idx=[]; let m;
+    while((m=re.exec(md))!==null){ idx.push({i:m.index,n:"Phase "+m[1],t:m[2].trim()}); }
+    if(!idx.length)throw 0;
+    const clean=s=>s.replace(/\*\*/g,"").replace(/`/g,"").replace(/\[|\]|✅|—/g," ").replace(/\s+/g," ").trim();
+    const out=[];
+    for(let k=0;k<idx.length;k++){
+      const seg=md.slice(idx[k].i, k+1<idx.length?idx[k+1].i:md.length);
+      const stm=seg.match(/\*\*Status:\*\*\s*([^\n]+)/);
+      const base=FALLBACK.find(f=>f.n===idx[k].n) || {t:idx[k].t.replace(/\(.*?\)/g,"").trim(),d:"",exit:""};
+      // work-item progress: numbered list lines; strike-through or DONE marks completion
+      let wi=null;
+      const items=seg.match(/^\d+\.\s+.+$/gm);
+      if(items&&items.length>1){
+        const done=items.filter(l=>/~~|\bDONE\b/.test(l)).length;
+        wi={done,total:items.length};
+      }
+      out.push({ n:idx[k].n, t:base.t, d:base.d, exit:base.exit, st: stm?clean(stm[1]):base.st, wi });
+    }
+    renderPhases(out);
+  }catch(e){ renderPhases(FALLBACK); }
+}
+
+/* ---------- CSV engine (shared) ---------- */
+// RFC-ish CSV parser: handles quoted fields with embedded commas + newlines
+function parseCSV(text){
+  const rows=[]; let f="",row=[],q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else{ if(c==='"')q=true;
+      else if(c===','){row.push(f);f="";}
+      else if(c==='\n'){row.push(f);rows.push(row);row=[];f="";}
+      else if(c==='\r'){}
+      else f+=c; }
+  }
+  if(f.length||row.length){row.push(f);rows.push(row);}
+  return rows;
+}
+async function fetchCSV(file){
+  const r=await fetch(`${RAW}/${file}`); if(!r.ok)throw 0;
+  return parseCSV(await r.text());
+}
+function colIndex(rows,names){
+  const H=rows[0].map(x=>x.trim()); const ci={};
+  names.forEach(k=>ci[k]=H.indexOf(k)); return ci;
+}
+
+/* ---------- voice logs → telemetry + heard feed ---------- */
+const VOICE_CSVS=["droid_voice_log.csv","droid_voice_log_stale_build_session.csv","droid_voice_log_v3_validation.csv"];
+function parseVoiceRows(rows){
+  const ci=colIndex(rows,["timestamp","script","action","command_hex","ack_ms","reacted","notes"]);
+  const out=[];
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i]; if(!row||row.length<=ci.reacted)continue;
+    const action=(row[ci.action]||"").trim();
+    if(!/voice/i.test(action))continue;
+    const notes=row[ci.notes]||"";
+    const g=notes.match(/gemini=(\d+)ms/), b=notes.match(/(?:^|\s)ble=(\d+)ms/), fb=notes.match(/firstBLE=(\d+)ms/);
+    const heard=(notes.match(/heard="([^"]*)"/)||[])[1]||"";
+    const mood=(notes.match(/mood="([^"]*)"/)||[])[1]||"";
+    const errm=(notes.match(/err=([^\n]{0,90})/)||[])[1]||"";
+    const script=(row[ci.script]||"").trim();
+    out.push({
+      ts:(row[ci.timestamp]||"").trim(),
+      phase:/v3|v4|v\d\d/.test(script)?2:1,
+      reacted:(row[ci.reacted]||"").trim().toLowerCase()==="y",
+      ack:parseFloat(row[ci.ack_ms]),
+      cmds:(row[ci.command_hex]||"").trim(),
+      gemini:g?+g[1]:null, ble:b?+b[1]:null, firstBLE:fb?+fb[1]:null,
+      heard, mood, err:errm
+    });
+  }
+  return out;
+}
+async function loadVoice(){
+  let all=[]; let reached=false;
+  for(const f of VOICE_CSVS){
+    try{ const rows=await fetchCSV(f); reached=true; all=all.concat(parseVoiceRows(rows)); }catch(e){}
+  }
+  if(!reached||!all.length){ renderTelemetry(null); renderHeard(null); return; }
+  all.sort((a,b)=>a.ts<b.ts?-1:1);
+  renderTelemetry(all); renderHeard(all);
+}
+
+/* ---------- telemetry rendering ---------- */
+const medianLines={
+  id:"medianLines",
+  afterDatasetsDraw(chart,args,opts){
+    if(!opts||!opts.lines)return;
+    const {ctx,chartArea,scales}=chart; if(!scales.y)return;
+    ctx.save();
+    opts.lines.forEach(l=>{
+      const y=scales.y.getPixelForValue(l.v);
+      if(y<chartArea.top||y>chartArea.bottom)return;
+      ctx.strokeStyle=l.color; ctx.globalAlpha=.7; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(chartArea.left,y); ctx.lineTo(chartArea.right,y); ctx.stroke();
+      ctx.globalAlpha=1; ctx.fillStyle=l.color; ctx.font=`10px ${MONO}`;
+      ctx.fillText(l.label,chartArea.left+6,y-5);
+    });
+    ctx.restore();
+  }
+};
+function baseScale(title){
+  return {grid:{color:CLR.grid},title:{display:true,text:title,color:CLR.mute,font:{family:MONO,size:10}},
+    ticks:{color:CLR.mute,font:{family:MONO,size:10}}};
+}
+function legendOpts(){ return {labels:{color:CLR.ink,font:{family:MONO,size:10},boxWidth:10,usePointStyle:true}}; }
+
+function renderTelemetry(all){
+  let ok,err,p1,p2,bles,gems1,gems2,rest1,mix,moods;
+  if(all){
+    ok=all.filter(r=>r.reacted).length; err=all.length-ok;
+    const good=all.filter(r=>r.reacted&&r.ack>0);
+    p1=good.filter(r=>r.phase===1).map(r=>r.ack);
+    p2=good.filter(r=>r.phase===2).map(r=>r.ack);
+    bles=good.map(r=>r.ble).filter(v=>v!=null);
+    gems1=good.filter(r=>r.phase===1&&r.gemini).map(r=>r.gemini);
+    gems2=good.filter(r=>r.phase===2&&r.gemini).map(r=>r.gemini);
+    rest1=good.filter(r=>r.phase===1&&r.gemini).map(r=>Math.max(0,Math.round(r.ack-r.gemini)));
+    mix={}; moods={};
+    good.forEach(r=>{
+      r.cmds.split("+").map(s=>s.trim()).filter(Boolean).forEach(w=>{
+        const k=w.replace(/^look_(left|right)$/,"look"); mix[k]=(mix[k]||0)+1;
+      });
+      if(r.mood)moods[r.mood]=(moods[r.mood]||0)+1;
+    });
+    // v3 parse-clean note
+    const p2runs=all.filter(r=>r.phase===2);
+    const p2parseFails=p2runs.filter(r=>!r.reacted&&!/503/.test(r.err)).length;
+    if(p2runs.length&&p2parseFails===0){
+      $("tSuccS").textContent="v3 loop: 100% parse-clean";
+    }
+  }else{
+    // baked fallback if CSVs unreachable
+    $("telemSrc").textContent="baked · logs offline";
+    ok=23; err=8;
+    p1=[2716,2738,3479,2330,3690,2585,2327,2415,3851,2858,2647];
+    p2=[793,906,995,919,891,967,919,1093,888,879,959,1285];
+    bles=[137,157,176,137,106,106,129,108,171,168,112,150];
+    gems1=[3334,2816,2176,2290,2585,2596,2212,2307,2611,2706,2464];
+    gems2=[1148,764,819,782,687,785,839,811,922,720,767,809];
+    rest1=[145,874,154,900,131,142,115,108,1240,152,183];
+    mix={beep:20,drive:14,spin:12,led_on:4,look:3};
+    moods={eager:5,sassy:3,determined:2,obedient:2,excited:2,cheerful:2,confused:2,playful:1,spunky:1,obliging:1,happy:1,helpful:1};
+  }
+  const total=ok+err;
+  countUp($("tRuns"),total);
+  $("tRunsS").textContent=`${ok} reacted · ${err} errored`;
+  countUp($("tSucc"),total?Math.round(100*ok/total):0,v=>v+"%");
+  const m1=median(p1),m2=median(p2),mb=median(bles);
+  $("tP1").textContent=m1?m1+" ms":"—";
+  $("tP2").textContent=m2?m2+" ms":"—";
+  countUp($("hkRuns"),total);
+  $("hkLat").textContent=m2?m2+" ms":"—";
+  const mg2=median(gems2);
+  if(mb!=null)$("telemNote").innerHTML=`Median in-loop: Gemini <b style="color:${CLR.blue}">${mg2||"—"} ms</b> · BLE write-ACK <b style="color:${CLR.amber2}">${mb} ms</b>. The droid was never the bottleneck — cognition was, and hardening cut it ~3×.`;
+  const sg=$("svgGem"),sb=$("svgBle");
+  if(sg&&mg2)sg.textContent=`gemini ≈ ${mg2} ms`;
+  if(sb&&mb)sb.textContent=`ACK ≈ ${mb} ms`;
+  drawCharts({p1,p2,m1,m2,gems1,gems2,rest1,bles,mix});
+  renderMoods(moods);
+}
+function drawCharts(d){
+  if(!window.Chart)return;
+  Chart.defaults.font.family=MONO;
+  const toPts=arr=>arr.map((y,i)=>({x:i+1,y}));
+  const lat=$("latChart");
+  if(lat)new Chart(lat,{type:"scatter",
+    data:{datasets:[
+      {label:`Phase 1 · MVP loop (${d.p1.length})`,data:toPts(d.p1),backgroundColor:"rgba(53,192,125,.85)",pointRadius:6,pointHoverRadius:9},
+      {label:`Phase 2 · hardened v3 (${d.p2.length})`,data:toPts(d.p2),backgroundColor:CLR.amber,pointRadius:6,pointHoverRadius:9}
+    ]},
+    options:{responsive:true,animation:{duration:reduceMotion?0:900},
+      scales:{ y:{beginAtZero:true,...baseScale("utterance → reaction (ms)")}, x:{grid:{display:false},...baseScale("logged run"),ticks:{color:CLR.mute,stepSize:1,font:{family:MONO,size:10}}} },
+      plugins:{legend:legendOpts(),
+        medianLines:{lines:[
+          ...(d.m1?[{v:d.m1,color:"rgba(53,192,125,.9)",label:`p1 median ${d.m1}ms`}]:[]),
+          ...(d.m2?[{v:d.m2,color:CLR.amber2,label:`p2 median ${d.m2}ms`}]:[])
+        ]},
+        tooltip:{callbacks:{label:c=>c.raw.y+" ms  (run "+c.raw.x+")"}}}
+    },plugins:[medianLines]});
+  const bud=$("budgetChart");
+  const g1=median(d.gems1)||0,g2=median(d.gems2)||0,r1=median(d.rest1)||0,b2=median(d.bles)||0;
+  if(bud&&(g1||g2))new Chart(bud,{type:"bar",
+    data:{labels:["Phase 1 · MVP","Phase 2 · v3"],datasets:[
+      {label:"Gemini inference",data:[g1,g2],backgroundColor:"rgba(74,163,255,.75)",borderRadius:4,stack:"s"},
+      {label:"BLE + overhead",data:[r1,b2],backgroundColor:CLR.amber,borderRadius:4,stack:"s"}
+    ]},
+    options:{indexAxis:"y",responsive:true,animation:{duration:reduceMotion?0:900},
+      scales:{ x:{stacked:true,beginAtZero:true,...baseScale("median ms per run")}, y:{stacked:true,grid:{display:false},ticks:{color:CLR.ink,font:{family:MONO,size:10}}} },
+      plugins:{legend:legendOpts(),tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw} ms`}}}
+    }});
+  const mixEl=$("mixChart");
+  const keys=Object.keys(d.mix||{}).sort((a,b)=>d.mix[b]-d.mix[a]);
+  if(mixEl&&keys.length)new Chart(mixEl,{type:"doughnut",
+    data:{labels:keys.map(k=>`${k} × ${d.mix[k]}`),datasets:[{data:keys.map(k=>d.mix[k]),
+      backgroundColor:["#ff7a1a","#4aa3ff","#35c07d","#ffb020","#a97fff","#ff5d5d"].slice(0,keys.length),
+      borderColor:"#1a1e22",borderWidth:3,hoverOffset:8}]},
+    options:{responsive:true,cutout:"62%",animation:{duration:reduceMotion?0:900},
+      plugins:{legend:{position:"right",...legendOpts()}}}});
+  // hero: commands decoded (from mix keys + protocol table filled later)
+}
+function renderMoods(moods){
+  const el=$("moods"); if(!el)return;
+  const keys=Object.keys(moods||{}).sort((a,b)=>moods[b]-moods[a]);
+  if(!keys.length){ el.innerHTML='<span class="loading">no mood data</span>'; return; }
+  el.innerHTML=keys.map(k=>`<span class="mood">${esc(k)} <b>×${moods[k]}</b></span>`).join("");
+}
+
+/* ---------- heard feed ---------- */
+function renderHeard(all){
+  const el=$("heardFeed"); if(!el)return;
+  if(!all){ el.innerHTML='<div class="loading">Voice logs unreachable right now — they load straight from the repo and refresh on reload.</div>'; return; }
+  const rows=[...all].reverse().slice(0,10);
+  el.innerHTML=rows.map(r=>{
+    const heard=r.heard||"(unintelligible)";
+    if(!r.reacted){
+      const etag=/503/.test(r.err)?"gemini 503 · upstream":"parse error · fixed in v3";
+      return `<div class="run err"><span class="ph">P${r.phase}</span>
+        <div><div class="q">${esc(heard)}</div><div class="meta"><span class="pill e">✗ ${etag}</span></div></div>
+        <div class="ms">no reaction</div></div>`;
+    }
+    const cmds=r.cmds.split("+").map(s=>`<span class="pill a">${esc(s.trim())}</span>`).join("");
+    const mood=r.mood?`<span class="pill m">${esc(r.mood)}</span>`:"";
+    return `<div class="run"><span class="ph">P${r.phase}</span>
+      <div><div class="q">${esc(heard)}</div><div class="meta">${cmds}${mood}</div></div>
+      <div class="ms">${Math.round(r.ack)} ms</div></div>`;
+  }).join("");
+}
+
+/* ---------- protocol map from bench logs ---------- */
+const BENCH_CSVS=["droid_activity_log.csv","droid_activity_log_web.csv"];
+async function loadProtocol(){
+  const body=document.querySelector("#protoTable tbody"); if(!body)return;
+  let rows=[]; let reached=false;
+  for(const f of BENCH_CSVS){
+    try{ const r=await fetchCSV(f); reached=true;
+      const ci=colIndex(r,["action","command_hex","ack_ms","reacted","notes"]);
+      for(let i=1;i<r.length;i++){
+        const row=r[i]; if(!row||row.length<=ci.notes)continue;
+        const hex=(row[ci.command_hex]||"").trim();
+        const action=(row[ci.action]||"").trim();
+        if(!hex||!action||/Notify|Init handshake/i.test(action))continue;
+        rows.push({action,hex,ack:parseFloat(row[ci.ack_ms]),
+          reacted:(row[ci.reacted]||"").trim().toLowerCase(),
+          note:(row[ci.notes]||"").split(";")[0].trim()});
+      }
+    }catch(e){}
+  }
+  if(!reached||!rows.length){
+    body.innerHTML='<tr><td colspan="5" class="loading">Bench logs unreachable right now — they parse straight from the repo CSVs and refresh on reload.</td></tr>';
+    return;
+  }
+  // group by command name
+  const groups={};
+  rows.forEach(r=>{
+    const k=r.action.replace(/\s*\(.*?\)\s*$/,"").trim();
+    (groups[k]=groups[k]||{hex:r.hex,acks:[],y:0,n:0,note:r.note}).acks.push(r.ack);
+    if(r.reacted==="y")groups[k].y++; else if(r.reacted==="n")groups[k].n++;
+    if(r.reacted==="y"&&r.note)groups[k].note=r.note;
+  });
+  const names=Object.keys(groups);
+  body.innerHTML=names.map(k=>{
+    const g=groups[k];
+    const med=median(g.acks.filter(v=>isFinite(v)));
+    const ver=g.y>0?`<span class="ver y">✓ on-unit</span>`:`<span class="ver n">✗ ${g.n?"no reaction":"unverified"}</span>`;
+    return `<tr><td class="cmd">${esc(k)}</td><td class="hex">${esc(g.hex)}</td><td class="ms">${med!=null?med+" ms":"—"}</td><td>${ver}</td><td style="color:var(--mute); font-size:.78rem">${esc(g.note||"")}</td></tr>`;
+  }).join("");
+  const verified=names.filter(k=>groups[k].y>0).length;
+  countUp($("hkCmds"),verified);
+  $("protoSrc").textContent=`reverse-engineered · ${verified} confirmed on-unit`;
+}
+
+loadRepo(); loadFeed(); loadRoadmap(); loadVoice(); loadProtocol();
+</script>
+<noscript><div style="max-width:1120px;margin:20px auto;padding:0 22px;font-family:monospace;color:#8a9096">Live data needs JavaScript — the repo itself is at github.com/ireadbrainwaves/project-6th-sense.</div></noscript>
+</body>
+</html>
